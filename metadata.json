@@ -1,0 +1,8 @@
+{
+  "name": "Remix OmniHR - Enterprise HR Management \u0026 Employee Portal",
+  "description": "Secure enterprise HR management system featuring role-based access control, leave management (EL, CL, SL, PL) with real-time approvals, immutable performance reviews, document vault, payroll accounting sync, offline resilience, and monthly compliance reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
