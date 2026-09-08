@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Employee, LeaveRequest, PerformanceReview } from '../types';
+import { LeaveBalancesCard } from './LeaveBalancesCard';
 
 interface DashboardOverviewProps {
   onNavigateTab: (tab: string) => void;
@@ -219,86 +220,71 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span className="text-xs font-medium">Earned Leave (EL)</span>
-                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                  {balance.EL.remaining} days left
-                </span>
+                <span className="text-xs font-medium">Leave Days Available</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                  <CalendarCheck className="h-4 w-4" />
+                </div>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {balance.EL.remaining}
+                  {balance.EL.remaining + balance.CL.remaining + balance.SL.remaining + balance.PL.remaining}
                 </span>
-                <span className="text-xs text-slate-400">/ {balance.EL.total} Total</span>
+                <span className="text-xs text-emerald-600 font-medium dark:text-emerald-400">
+                  Remaining
+                </span>
               </div>
-              <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-indigo-600"
-                  style={{ width: `${(balance.EL.remaining / balance.EL.total) * 100}%` }}
-                />
-              </div>
+              <p className="mt-1 text-[11px] text-slate-400">Across Annual, Casual, Sick, & PL</p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span className="text-xs font-medium">Casual Leave (CL)</span>
-                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                  {balance.CL.remaining} days left
-                </span>
+                <span className="text-xs font-medium">My Active Requests</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+                  <Clock className="h-4 w-4" />
+                </div>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {balance.CL.remaining}
+                  {userLeaves.filter((l) => l.status === 'pending').length}
                 </span>
-                <span className="text-xs text-slate-400">/ {balance.CL.total} Total</span>
+                <span className="text-xs text-amber-600 font-medium">Pending Review</span>
               </div>
-              <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{ width: `${(balance.CL.remaining / balance.CL.total) * 100}%` }}
-                />
-              </div>
+              <p className="mt-1 text-[11px] text-slate-400">In workflow queue</p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span className="text-xs font-medium">Sick Leave (SL)</span>
-                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                  {balance.SL.remaining} days left
-                </span>
+                <span className="text-xs font-medium">Performance Score</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                  <Star className="h-4 w-4" />
+                </div>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {balance.SL.remaining}
+                  {latestUserReview ? latestUserReview.overallRating : '4.8'}
                 </span>
-                <span className="text-xs text-slate-400">/ {balance.SL.total} Total</span>
+                <span className="text-xs text-slate-400">/ 5.0</span>
               </div>
-              <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-blue-500"
-                  style={{ width: `${(balance.SL.remaining / balance.SL.total) * 100}%` }}
-                />
-              </div>
+              <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                {latestUserReview ? latestUserReview.ratingLabel : 'Exceeds Expectations'}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span className="text-xs font-medium">Privilege Leave (PL)</span>
-                <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
-                  {balance.PL.remaining} days left
-                </span>
+                <span className="text-xs font-medium">Assigned Division</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                  <Briefcase className="h-4 w-4" />
+                </div>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {balance.PL.remaining}
+                <span className="text-xl font-bold text-slate-900 dark:text-white truncate">
+                  {currentUser.department}
                 </span>
-                <span className="text-xs text-slate-400">/ {balance.PL.total} Total</span>
               </div>
-              <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-purple-500"
-                  style={{ width: `${(balance.PL.remaining / balance.PL.total) * 100}%` }}
-                />
-              </div>
+              <p className="mt-1 text-[11px] text-slate-400 truncate">
+                {currentUser.workMode} • {currentUser.location}
+              </p>
             </div>
           </>
         )}
@@ -308,6 +294,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Leave Tracking & Performance Snapshot */}
         <div className="lg:col-span-2 space-y-6">
+          {/* New Leave Balances Summary Card with Circular Progress Rings */}
+          <LeaveBalancesCard
+            currentUser={currentUser}
+            employees={employees}
+            onOpenApplyLeave={onOpenApplyLeave}
+            onNavigateTab={onNavigateTab}
+          />
+
           {/* Active Leave Requests with Real-Time Approval Tracking */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
