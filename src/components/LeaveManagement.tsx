@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calendar,
   Clock,
@@ -13,10 +13,14 @@ import {
   Shield,
   Ban,
   ArrowRight,
+  CalendarDays,
+  ListOrdered,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { LeaveRequest, LeaveType, LeaveStatus } from '../types';
+import { TeamLeaveCalendar } from './TeamLeaveCalendar';
 
 interface LeaveManagementProps {
   initialApplyOpen?: boolean;
@@ -25,6 +29,7 @@ interface LeaveManagementProps {
 export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOpen = false }) => {
   const { currentUser, isOnline, refreshUserData } = useAuth();
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => storageService.getLeaves());
+  const [activeViewTab, setActiveViewTab] = useState<'calendar' | 'requests'>('calendar');
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(initialApplyOpen);
   const [selectedFilter, setSelectedFilter] = useState<'all' | LeaveStatus>('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'all' | LeaveType>('all');
@@ -39,6 +44,23 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
   const [daysCount, setDaysCount] = useState(3);
 
   const balance = currentUser.leaveBalance;
+
+  // Calculate total overlapping days in current month (September 2026)
+  const currentMonthOverlapsCount = useMemo(() => {
+    let count = 0;
+    for (let day = 1; day <= 30; day++) {
+      const dateStr = `2026-09-${String(day).padStart(2, '0')}`;
+      const onDay = leaves.filter(
+        (l) =>
+          l.status !== 'rejected' &&
+          l.status !== 'cancelled' &&
+          l.startDate <= dateStr &&
+          l.endDate >= dateStr
+      );
+      if (onDay.length >= 2) count++;
+    }
+    return count;
+  }, [leaves]);
 
   const handleDateChange = (start: string, end: string) => {
     setStartDate(start);
@@ -219,180 +241,241 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
-        <div className="flex flex-wrap gap-1.5">
-          {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setSelectedFilter(status)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                selectedFilter === status
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-              }`}
-            >
-              {status === 'all' ? 'All Applications' : status}
-            </button>
-          ))}
+      {/* Primary View Navigation Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit">
+          <button
+            onClick={() => setActiveViewTab('calendar')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              activeViewTab === 'calendar'
+                ? 'bg-white text-indigo-700 shadow-xs dark:bg-slate-900 dark:text-indigo-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <CalendarDays className="h-4 w-4" />
+            <span>Team Leave Calendar</span>
+            {currentMonthOverlapsCount > 0 && (
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white shadow-2xs">
+                {currentMonthOverlapsCount} Overlaps
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveViewTab('requests')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              activeViewTab === 'requests'
+                ? 'bg-white text-indigo-700 shadow-xs dark:bg-slate-900 dark:text-indigo-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <ListOrdered className="h-4 w-4" />
+            <span>Requests Feed & Log</span>
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+              {visibleLeaves.length}
+            </span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-400 font-medium">Type:</span>
-          {(['all', 'EL', 'CL', 'SL', 'PL'] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setSelectedTypeFilter(type)}
-              className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${
-                selectedTypeFilter === type
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-              }`}
-            >
-              {type === 'all' ? 'Any' : type}
-            </button>
-          ))}
+        <div className="text-xs text-slate-500">
+          Viewing schedule as:{' '}
+          <strong className="text-slate-800 dark:text-slate-200">{currentUser.name}</strong>{' '}
+          <span className="text-slate-400">({currentUser.role} • {currentUser.department})</span>
         </div>
       </div>
 
-      {/* Leave Application Feed */}
-      <div className="space-y-3">
-        {visibleLeaves.map((leave) => {
-          const isOwner = leave.employeeId === currentUser.id;
-          const canApprove =
-            (currentUser.role === 'admin' || currentUser.role === 'manager') &&
-            leave.status === 'pending' &&
-            !isOwner;
-
-          return (
-            <div
-              key={leave.id}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 transition-all hover:border-slate-300 dark:hover:border-slate-700"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black text-white shadow-xs ${
-                      leave.leaveType === 'EL'
-                        ? 'bg-indigo-600'
-                        : leave.leaveType === 'CL'
-                        ? 'bg-emerald-600'
-                        : leave.leaveType === 'SL'
-                        ? 'bg-blue-600'
-                        : 'bg-purple-600'
-                    }`}
-                  >
-                    {leave.leaveType}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-slate-900 dark:text-white">
-                        {leave.employeeName}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        ({leave.employeeRole} • {leave.department})
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">#{leave.id}</span>
-                    </div>
-
-                    <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                      <span>
-                        {leave.startDate} <span className="text-slate-400">&rarr;</span> {leave.endDate}
-                      </span>
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {leave.daysCount} {leave.daysCount === 1 ? 'Day' : 'Days'}
-                      </span>
-                    </div>
-
-                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                      <strong className="text-slate-700 dark:text-slate-200">Reason:</strong> {leave.reason}
-                    </p>
-
-                    {leave.rejectionReason && (
-                      <p className="mt-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-xl border border-rose-100 dark:border-rose-900">
-                        <strong>Rejection Note:</strong> {leave.rejectionReason}
-                      </p>
-                    )}
-
-                    {leave.approvedBy && (
-                      <p className="mt-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                        Approved by: {leave.approvedBy} on {leave.approvedOn?.slice(0, 10)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status Badge & Action Controls */}
-                <div className="flex flex-col sm:items-end gap-2 shrink-0">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider self-start sm:self-auto ${
-                      leave.status === 'approved'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
-                        : leave.status === 'pending'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
-                        : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-                    }`}
-                  >
-                    {leave.status === 'pending' ? 'Pending Real-Time Approval' : leave.status}
-                  </span>
-
-                  {/* Manager/Admin Approvals */}
-                  {canApprove && (
-                    <div className="flex items-center gap-1.5 mt-2">
-                      <button
-                        onClick={() => handleStatusChange(leave.id, 'approved', 'Approved by authorized manager/HR.')}
-                        className="flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>Approve</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          const reasonPrompt = prompt('Enter rejection reason for employee records:') || 'Operational constraints';
-                          handleStatusChange(leave.id, 'rejected', reasonPrompt);
-                        }}
-                        className="flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/60 dark:text-rose-300"
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        <span>Reject</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Employee Self-Cancel */}
-                  {isOwner && leave.status === 'pending' && (
-                    <button
-                      onClick={() => handleStatusChange(leave.id, 'cancelled', 'Cancelled by employee.')}
-                      className="text-xs text-rose-600 hover:text-rose-700 font-semibold underline flex items-center gap-1"
-                    >
-                      <Ban className="h-3 w-3" />
-                      <span>Cancel Request</span>
-                    </button>
-                  )}
-
-                  {/* Discussion Comments button */}
-                  <button
-                    onClick={() => setCommentModalLeave(leave)}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 mt-1"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    <span>Audit Notes ({leave.comments?.length || 0})</span>
-                  </button>
-                </div>
-              </div>
+      {/* Main View Content */}
+      {activeViewTab === 'calendar' ? (
+        <TeamLeaveCalendar
+          leaves={leaves}
+          onApplyLeaveClick={(defaultDate) => {
+            if (defaultDate) {
+              setStartDate(defaultDate);
+              setEndDate(defaultDate);
+              setDaysCount(1);
+            }
+            setIsApplyModalOpen(true);
+          }}
+          onStatusChange={handleStatusChange}
+        />
+      ) : (
+        <>
+          {/* Filter Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex flex-wrap gap-1.5">
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setSelectedFilter(status)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                    selectedFilter === status
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {status === 'all' ? 'All Applications' : status}
+                </button>
+              ))}
             </div>
-          );
-        })}
 
-        {visibleLeaves.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-400 dark:border-slate-800">
-            <CalendarCheck className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No leave requests found</p>
-            <p className="text-xs text-slate-400 mt-1">There are no applications matching the active filters.</p>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400 font-medium">Type:</span>
+              {(['all', 'EL', 'CL', 'SL', 'PL'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setSelectedTypeFilter(type)}
+                  className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${
+                    selectedTypeFilter === type
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  {type === 'all' ? 'Any' : type}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Leave Application Feed */}
+          <div className="space-y-3">
+            {visibleLeaves.map((leave) => {
+              const isOwner = leave.employeeId === currentUser.id;
+              const canApprove =
+                (currentUser.role === 'admin' || currentUser.role === 'manager') &&
+                leave.status === 'pending' &&
+                !isOwner;
+
+              return (
+                <div
+                  key={leave.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 transition-all hover:border-slate-300 dark:hover:border-slate-700"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black text-white shadow-xs ${
+                          leave.leaveType === 'EL'
+                            ? 'bg-indigo-600'
+                            : leave.leaveType === 'CL'
+                            ? 'bg-emerald-600'
+                            : leave.leaveType === 'SL'
+                            ? 'bg-blue-600'
+                            : 'bg-purple-600'
+                        }`}
+                      >
+                        {leave.leaveType}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-slate-900 dark:text-white">
+                            {leave.employeeName}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            ({leave.employeeRole} • {leave.department})
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">#{leave.id}</span>
+                        </div>
+
+                        <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+                          <span>
+                            {leave.startDate} <span className="text-slate-400">&rarr;</span> {leave.endDate}
+                          </span>
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            {leave.daysCount} {leave.daysCount === 1 ? 'Day' : 'Days'}
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                          <strong className="text-slate-700 dark:text-slate-200">Reason:</strong> {leave.reason}
+                        </p>
+
+                        {leave.rejectionReason && (
+                          <p className="mt-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-xl border border-rose-100 dark:border-rose-900">
+                            <strong>Rejection Note:</strong> {leave.rejectionReason}
+                          </p>
+                        )}
+
+                        {leave.approvedBy && (
+                          <p className="mt-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            Approved by: {leave.approvedBy} on {leave.approvedOn?.slice(0, 10)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status Badge & Action Controls */}
+                    <div className="flex flex-col sm:items-end gap-2 shrink-0">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider self-start sm:self-auto ${
+                          leave.status === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                            : leave.status === 'pending'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+                        }`}
+                      >
+                        {leave.status === 'pending' ? 'Pending Real-Time Approval' : leave.status}
+                      </span>
+
+                      {/* Manager/Admin Approvals */}
+                      {canApprove && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <button
+                            onClick={() => handleStatusChange(leave.id, 'approved', 'Approved by authorized manager/HR.')}
+                            className="flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Approve</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const reasonPrompt = prompt('Enter rejection reason for employee records:') || 'Operational constraints';
+                              handleStatusChange(leave.id, 'rejected', reasonPrompt);
+                            }}
+                            className="flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/60 dark:text-rose-300"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Employee Self-Cancel */}
+                      {isOwner && leave.status === 'pending' && (
+                        <button
+                          onClick={() => handleStatusChange(leave.id, 'cancelled', 'Cancelled by employee.')}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold underline flex items-center gap-1"
+                        >
+                          <Ban className="h-3 w-3" />
+                          <span>Cancel Request</span>
+                        </button>
+                      )}
+
+                      {/* Discussion Comments button */}
+                      <button
+                        onClick={() => setCommentModalLeave(leave)}
+                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 mt-1"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>Audit Notes ({leave.comments?.length || 0})</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {visibleLeaves.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-400 dark:border-slate-800">
+                <CalendarCheck className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No leave requests found</p>
+                <p className="text-xs text-slate-400 mt-1">There are no applications matching the active filters.</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Apply Leave Modal */}
       {isApplyModalOpen && (

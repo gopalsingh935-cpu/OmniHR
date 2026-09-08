@@ -47,6 +47,18 @@ export const storageService = {
     }
     if (!localStorage.getItem(STORAGE_KEYS.LEAVES)) {
       localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(INITIAL_LEAVES));
+    } else {
+      try {
+        const currentLeaves = JSON.parse(localStorage.getItem(STORAGE_KEYS.LEAVES) || '[]');
+        const existingIds = new Set(currentLeaves.map((l: any) => l.id));
+        const missing = INITIAL_LEAVES.filter((l) => !existingIds.has(l.id));
+        if (missing.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify([...currentLeaves, ...missing]));
+        }
+      } catch {
+        // Fallback to initial
+        localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(INITIAL_LEAVES));
+      }
     }
     if (!localStorage.getItem(STORAGE_KEYS.REVIEWS)) {
       localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(INITIAL_REVIEWS));
