@@ -180,7 +180,7 @@ export const PredictiveStaffingAnalytics: React.FC<PredictiveStaffingAnalyticsPr
                   </h1>
                   <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
                     <Zap className="h-3 w-3" />
-                    {forecast?.aiGenerated ? 'Gemini 3.8 Flash' : 'OmniHR Heuristic Engine'}
+                    {forecast?.aiGenerated ? 'Gemini 3.8 Flash' : 'Workforce Algorithmic Engine'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">

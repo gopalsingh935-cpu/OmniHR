@@ -253,7 +253,7 @@ export const predictiveAnalyticsService = {
         },
       ],
       aiGenerated: false,
-      note: 'OmniHR High-Precision Workforce Engine',
+      note: 'Enterprise High-Precision Workforce Engine',
     };
   },
 
@@ -309,7 +309,7 @@ export const predictiveAnalyticsService = {
         actorName: currentUser.name,
         actorRole: currentUser.role,
         actionType: 'FORECAST_GENERATED',
-        description: `Executed AI Predictive Staffing Shortage Forecast (Horizon: ${lookaheadDays}d, Filter: ${departmentFilter}, Risk: ${result.overallRiskLevel} [${result.overallRiskScore}/100], AI: ${result.aiGenerated ? 'Gemini 3.8 Flash' : 'OmniHR Heuristics'})`,
+        description: `Executed AI Predictive Staffing Shortage Forecast (Horizon: ${lookaheadDays}d, Filter: ${departmentFilter}, Risk: ${result.overallRiskLevel} [${result.overallRiskScore}/100], AI: ${result.aiGenerated ? 'Gemini 3.8 Flash' : 'Algorithmic Engine'})`,
       });
     }
 

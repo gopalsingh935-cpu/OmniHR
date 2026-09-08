@@ -70,7 +70,11 @@ export const PayrollAndDocuments: React.FC = () => {
       {
         title: newDocTitle.endsWith('.pdf') ? newDocTitle : `${newDocTitle}.pdf`,
         category: newDocCategory,
-        fileSize: selectedFileMock ? `${(selectedFileMock.size / (1024 * 1024)).toFixed(1)} MB` : '1.8 MB',
+        fileSize: selectedFileMock
+          ? selectedFileMock.size < 1024 * 1024
+            ? `${Math.max(1, Math.round(selectedFileMock.size / 1024))} KB`
+            : `${(selectedFileMock.size / (1024 * 1024)).toFixed(1)} MB`
+          : '1.8 MB',
         fileType: 'application/pdf',
       },
       {
@@ -89,7 +93,7 @@ export const PayrollAndDocuments: React.FC = () => {
   // Download payslip receipt simulation
   const handleDownloadPayslip = (payMonth: string, amount: number) => {
     const text = `====================================
-OMNIHR OFFICIAL PAYSLIP RECORD
+ENTERPRISE OFFICIAL PAYSLIP RECORD
 ====================================
 Employee: ${currentUser.name} (${currentUser.employeeCode})
 Department: ${currentUser.department}

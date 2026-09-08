@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 
 export const BiometricModal: React.FC = () => {
-  const { showBiometricModal, closeBiometricModal, currentUser } = useAuth();
+  const { showBiometricModal, closeBiometricModal, completeBiometricAuth, currentUser } = useAuth();
   const [step, setStep] = useState<'scan' | 'success' | 'failed'>('scan');
   const [scanning, setScanning] = useState<boolean>(false);
 
@@ -24,7 +24,7 @@ export const BiometricModal: React.FC = () => {
       });
       setTimeout(() => {
         setStep('scan');
-        closeBiometricModal();
+        completeBiometricAuth();
       }, 1000);
     }, 1200);
   };

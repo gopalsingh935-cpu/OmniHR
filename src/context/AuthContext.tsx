@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Employee, Role } from '../types';
 import { storageService } from '../services/storageService';
 
@@ -16,6 +16,7 @@ interface AuthContextType {
   isSyncing: boolean;
   isBiometricAuthenticated: boolean;
   promptBiometricAuth: () => Promise<boolean>;
+  completeBiometricAuth: () => void;
   openBiometricModal: () => void;
   closeBiometricModal: () => void;
   showBiometricModal: boolean;
@@ -152,22 +153,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isBiometricAuthenticated, setIsBiometricAuthenticated] = useState<boolean>(true);
   const [showBiometricModal, setShowBiometricModal] = useState<boolean>(false);
   const [showOAuthModal, setShowOAuthModal] = useState<boolean>(false);
+  const biometricResolverRef = useRef<((success: boolean) => void) | null>(null);
 
   const openBiometricModal = () => setShowBiometricModal(true);
-  const closeBiometricModal = () => setShowBiometricModal(false);
+
+  const closeBiometricModal = () => {
+    setShowBiometricModal(false);
+    if (biometricResolverRef.current) {
+      biometricResolverRef.current(false);
+      biometricResolverRef.current = null;
+    }
+  };
+
+  const completeBiometricAuth = () => {
+    setIsBiometricAuthenticated(true);
+    setShowBiometricModal(false);
+    if (biometricResolverRef.current) {
+      biometricResolverRef.current(true);
+      biometricResolverRef.current = null;
+    }
+  };
+
   const openOAuthModal = () => setShowOAuthModal(true);
   const closeOAuthModal = () => setShowOAuthModal(false);
 
   const promptBiometricAuth = async (): Promise<boolean> => {
     setShowBiometricModal(true);
     return new Promise((resolve) => {
-      // Handled via modal callback
-      const checkInterval = setInterval(() => {
-        if (!showBiometricModal) {
-          clearInterval(checkInterval);
-          resolve(true);
-        }
-      }, 500);
+      biometricResolverRef.current = resolve;
     });
   };
 
@@ -209,6 +222,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPendingSyncCount(storageService.getPendingSyncQueue().length);
   };
 
+  // Subscribe to storage updates
+  useEffect(() => {
+    const unsubscribe = storageService.subscribe(() => {
+      refreshUserData();
+    });
+    return unsubscribe;
+  }, [currentUser.id]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -225,6 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSyncing,
         isBiometricAuthenticated,
         promptBiometricAuth,
+        completeBiometricAuth,
         openBiometricModal,
         closeBiometricModal,
         showBiometricModal,

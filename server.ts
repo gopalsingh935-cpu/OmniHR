@@ -206,7 +206,7 @@ function generateAlgorithmicForecast(
     analysisDate: baseDate.toISOString().split('T')[0],
     overallRiskLevel,
     overallRiskScore: avgRiskScore,
-    summary: `OmniHR Predictive Engine identified ${
+    summary: `Predictive Workforce Engine identified ${
       overallRiskLevel === 'Low' ? 'minimal operational risks' : `${overallRiskLevel.toLowerCase()} operational risk factors`
     } across ${targetDepartments.length} functional units over the next ${lookaheadDays} days. Key attention required for ${
       departmentForecasts.filter(d => d.riskLevel !== 'Low').map(d => d.department).join(', ') || 'none'
@@ -261,8 +261,9 @@ app.post('/api/analytics/staffing-forecast', async (req, res) => {
     // If Gemini client is available, run Gemini 3.8 Flash model
     if (ai) {
       try {
-        const prompt = `You are OmniHR's enterprise workforce analytics intelligence engine.
+        const prompt = `You are the enterprise workforce analytics intelligence engine.
 Analyze the following corporate personnel and leave data to predict staffing shortages, departmental bottlenecks, and operational vulnerability over the next ${lookaheadDays} days.
+Ensure enterprise compliance: all employee health reasons and personal notes are strictly redacted.
 
 Current Simulation Date Context: 2026-09-08
 Lookahead Horizon: ${lookaheadDays} days
@@ -282,7 +283,7 @@ ${JSON.stringify(
   2
 )}
 
-Submitted and Approved Leaves (${leaves.length} records):
+Submitted and Approved Leaves (${leaves.length} records - Anonymized & Sanitized):
 ${JSON.stringify(
   leaves.map((l: any) => ({
     id: l.id,
@@ -293,7 +294,7 @@ ${JSON.stringify(
     endDate: l.endDate,
     daysCount: l.daysCount,
     status: l.status,
-    reason: l.reason,
+    // Sensitive personal/medical reasons redacted for privacy compliance
   })),
   null,
   2
@@ -385,7 +386,7 @@ Return ONLY valid JSON. Do not include markdown code block backticks if possible
           departmentFilter,
           simulationModifiers
         );
-        return res.json({ success: true, data: fallback, note: 'Generated using OmniHR Predictive Heuristics' });
+        return res.json({ success: true, data: fallback, note: 'Generated using Algorithmic Predictive Heuristics' });
       }
     }
 
@@ -397,7 +398,7 @@ Return ONLY valid JSON. Do not include markdown code block backticks if possible
       departmentFilter,
       simulationModifiers
     );
-    return res.json({ success: true, data: fallback, note: 'Generated using OmniHR Predictive Heuristics' });
+    return res.json({ success: true, data: fallback, note: 'Generated using Algorithmic Predictive Heuristics' });
   } catch (error: any) {
     console.error('Error generating staffing forecast:', error);
     res.status(500).json({ success: false, error: error.message });

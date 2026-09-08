@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CalendarCheck,
   PlusCircle,
@@ -154,6 +154,11 @@ export const LeaveBalancesCard: React.FC<LeaveBalancesCardProps> = ({
   onNavigateTab,
 }) => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>(currentUser.id);
+
+  // Synchronize when the global user switches
+  useEffect(() => {
+    setSelectedEmployeeId(currentUser.id);
+  }, [currentUser.id]);
 
   const selectedEmployee = employees.find((e) => e.id === selectedEmployeeId) || currentUser;
   const isViewingSelf = selectedEmployee.id === currentUser.id;

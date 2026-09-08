@@ -56,7 +56,7 @@ export const AuditLogViewer: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `OmniHR_Audit_Trail_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `EnterpriseHR_Audit_Trail_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

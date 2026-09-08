@@ -39,7 +39,31 @@ function generateIntegrityHash(content: string): string {
   return `sha256_${hex}${Date.now().toString(16).slice(-8)}`;
 }
 
+// Subscriber registry for real-time reactivity across components
+const storageSubscribers = new Set<() => void>();
+
 export const storageService = {
+  // Subscribe to storage changes
+  subscribe(callback: () => void): () => void {
+    storageSubscribers.add(callback);
+    return () => {
+      storageSubscribers.delete(callback);
+    };
+  },
+
+  notifySubscribers() {
+    storageSubscribers.forEach((cb) => {
+      try {
+        cb();
+      } catch (err) {
+        console.error('Storage subscriber notification error:', err);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('omnihr_storage_update'));
+    }
+  },
+
   // Initialization
   initStorage() {
     if (!localStorage.getItem(STORAGE_KEYS.EMPLOYEES)) {
@@ -148,6 +172,7 @@ export const storageService = {
       description: `Updated profile details, credentials or records for ${employee.name} (${employee.employeeCode})`,
     });
 
+    this.notifySubscribers();
     return true;
   },
 
@@ -172,6 +197,7 @@ export const storageService = {
       description: `Enrolled new employee record for ${employee.name} (${employee.employeeCode}) in ${employee.department}`,
     });
 
+    this.notifySubscribers();
     return true;
   },
 
@@ -235,6 +261,7 @@ export const storageService = {
       actionLink: 'leaves',
     });
 
+    this.notifySubscribers();
     return newLeave;
   },
 
@@ -306,6 +333,7 @@ export const storageService = {
       actionLink: 'leaves',
     });
 
+    this.notifySubscribers();
     return true;
   },
 
@@ -429,6 +457,7 @@ export const storageService = {
     };
     list.unshift(item);
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+    this.notifySubscribers();
   },
 
   markNotificationAsRead(id: string) {
@@ -437,12 +466,14 @@ export const storageService = {
     if (target) {
       target.read = true;
       localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+      this.notifySubscribers();
     }
   },
 
   markAllNotificationsAsRead() {
     const list = this.getNotifications().map((n) => ({ ...n, read: true }));
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+    this.notifySubscribers();
   },
 
   // Document management
@@ -479,6 +510,7 @@ export const storageService = {
       description: `Uploaded encrypted document "${doc.title}" to ${emp.name}'s secure vault (AES-256)`,
     });
 
+    this.notifySubscribers();
     return true;
   },
 
@@ -513,6 +545,7 @@ export const storageService = {
       description: `Reconciled ${recordsCount} payroll records totaling $${totalAmount.toLocaleString()} with ${accountingPlatform}`,
     });
 
+    this.notifySubscribers();
     return { success: true, recordsCount, totalAmount };
   },
 

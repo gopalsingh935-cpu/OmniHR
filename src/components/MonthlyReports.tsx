@@ -902,7 +902,7 @@ export const MonthlyReports: React.FC = () => {
 
         {/* Print-Only Running Page Footer */}
         <div className="hidden print:flex items-center justify-between border-t border-slate-300 pt-3 mt-8 text-[10px] text-slate-400">
-          <span>OmniHR Enterprise Compliance System • Confidential & Proprietary</span>
+          <span>Enterprise HR Management System • Internal Regulatory Compliance Audit</span>
           <span>Verification Hash: 8a7f-92b4-c10e • Page 1 of Official Audit</span>
         </div>
       </div>

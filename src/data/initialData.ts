@@ -96,7 +96,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
       },
       {
         id: 'doc-2',
-        title: 'Proprietary Info & Inventions Agreement (NDA).pdf',
+        title: 'Employee Non-Disclosure & Inventions Agreement.pdf',
         category: 'NDA',
         uploadedOn: '2021-03-15',
         fileSize: '1.1 MB',
@@ -247,7 +247,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
       },
       {
         id: 'doc-5',
-        title: 'Confidentiality and Restrictive Covenants.pdf',
+        title: 'Non-Disclosure and Confidentiality Policy.pdf',
         category: 'NDA',
         uploadedOn: '2022-01-10',
         fileSize: '1.4 MB',

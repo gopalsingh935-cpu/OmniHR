@@ -81,6 +81,14 @@ export const EmployeeDirectory: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Subscribe to real-time storage updates
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setEmployees(storageService.getEmployees());
+    });
+    return unsub;
+  }, []);
+
   // New Employee Form State (For HR Admin)
   const [newEmp, setNewEmp] = useState({
     name: '',
@@ -218,6 +226,22 @@ export const EmployeeDirectory: React.FC = () => {
 
     setEmployees(storageService.getEmployees());
     setIsAddModalOpen(false);
+    setNewEmp({
+      name: '',
+      email: '',
+      personalEmail: '',
+      phone: '',
+      designation: '',
+      department: 'Engineering',
+      role: 'employee',
+      workMode: 'Hybrid',
+      location: 'San Francisco, CA',
+      joiningDate: new Date().toISOString().split('T')[0],
+      emergencyName: '',
+      emergencyRelationship: 'Spouse',
+      emergencyPhone: '',
+      bio: '',
+    });
     refreshUserData();
   };
 

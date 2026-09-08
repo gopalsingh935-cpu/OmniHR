@@ -215,7 +215,7 @@ export const googleDriveService = {
       metadata.parents = [parentFolderId];
     }
 
-    const boundary = '-------OmniHRMultipartBoundary' + Math.random().toString(36).substring(2);
+    const boundary = '-------EnterpriseHRMultipartBoundary' + Math.random().toString(36).substring(2);
     const delimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
 

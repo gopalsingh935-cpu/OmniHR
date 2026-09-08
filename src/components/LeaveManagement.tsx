@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   Clock,
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  AlertCircle,
   PlusCircle,
   MessageSquare,
   UserCheck,
@@ -62,11 +63,23 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
     return count;
   }, [leaves]);
 
+  // Auto-subscribe to real-time storage mutations
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setLeaves(storageService.getLeaves());
+    });
+    return unsub;
+  }, []);
+
   const handleDateChange = (start: string, end: string) => {
+    let effectiveEnd = end;
+    if (start && end && end < start) {
+      effectiveEnd = start;
+    }
     setStartDate(start);
-    setEndDate(end);
+    setEndDate(effectiveEnd);
     const d1 = new Date(start);
-    const d2 = new Date(end);
+    const d2 = new Date(effectiveEnd);
     if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
       const diffDays = Math.max(1, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1);
       setDaysCount(diffDays);
@@ -75,7 +88,13 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
 
   const handleApplyLeave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason) return;
+    if (!reason.trim()) return;
+
+    const remainingAvailable = balance[leaveType]?.remaining ?? 0;
+    if (daysCount > remainingAvailable) {
+      alert(`Insufficient leave balance: You requested ${daysCount} days, but only ${remainingAvailable} days are remaining for ${leaveType}.`);
+      return;
+    }
 
     storageService.applyLeave(
       {
@@ -88,7 +107,7 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
         startDate,
         endDate,
         daysCount,
-        reason,
+        reason: reason.trim(),
       },
       {
         id: currentUser.id,
@@ -566,6 +585,16 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
                 </span>
               </div>
 
+              {daysCount > (balance[leaveType]?.remaining ?? 0) && (
+                <div className="rounded-xl bg-rose-50 p-2.5 text-xs text-rose-800 dark:bg-rose-950/50 dark:text-rose-300 flex items-center gap-2 border border-rose-200 dark:border-rose-900">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>
+                    Insufficient balance: Requesting <strong>{daysCount} days</strong>, but only{' '}
+                    <strong>{balance[leaveType]?.remaining ?? 0} days</strong> remain for {leaveType}.
+                  </span>
+                </div>
+              )}
+
               <div>
                 <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1">
                   Reason for Leave & Handoff Notes *
@@ -590,7 +619,8 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-indigo-600 py-2.5 font-semibold text-white hover:bg-indigo-700 shadow-sm"
+                  disabled={daysCount > (balance[leaveType]?.remaining ?? 0)}
+                  className="flex-1 rounded-xl bg-indigo-600 py-2.5 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-opacity"
                 >
                   Submit Application
                 </button>

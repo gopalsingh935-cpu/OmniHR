@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   CalendarCheck,
@@ -30,6 +30,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onOpenApplyLeave,
 }) => {
   const { currentUser, isOnline, pendingSyncCount } = useAuth();
+  const [, setTick] = useState(0);
+
+  // Subscribe to real-time storage changes
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setTick((t) => t + 1);
+    });
+    return unsub;
+  }, []);
+
   const employees = storageService.getEmployees();
   const leaves = storageService.getLeaves();
   const reviews = storageService.getReviews();
