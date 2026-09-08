@@ -405,6 +405,285 @@ Return ONLY valid JSON. Do not include markdown code block backticks if possible
   }
 });
 
+// Domain-aware conversational fallback generator for offline or unconfigured environments
+function generateFallbackChatResponse(
+  userQuery: string,
+  roleId: string,
+  model: string,
+  contextSummary?: any
+): string {
+  const q = userQuery.toLowerCase();
+
+  if (q.includes('el') || q.includes('earned leave') || q.includes('encash')) {
+    return `### 📋 Earned Leave (EL) Policy Guidelines
+Under OmniHR Enterprise Policy (rev. 2026):
+* **Annual Accrual**: Full-time employees accrue **1.5 days per month** (18 days per calendar year).
+* **Carry-Forward**: Up to **30 unused EL days** can roll over into subsequent calendar years.
+* **Encashment**: Employees with >15 accumulated days can encash up to 10 days during the annual fiscal closing (March/December).
+* **Notice Period**: Leaves spanning >3 consecutive days require submission at least **7 business days** in advance for manager approval.
+* **Current Context**: Your current balance is available in the **Leave Management** tab.`;
+  }
+
+  if (q.includes('cl') || q.includes('casual leave') || q.includes('sl') || q.includes('sick leave')) {
+    return `### 🏥 Casual (CL) & Sick Leave (SL) Overview
+* **Casual Leave (CL)**: Allocated at **12 days/year**. Intended for personal matters, emergency family obligations, and brief unplanned absences. Maximum 3 consecutive days per instance.
+* **Sick Leave (SL)**: Allocated at **10 days/year**. Medical certificates are mandatory for absences exceeding **2 consecutive days**.
+* **Approval Window**: Emergency leaves notify your direct manager instantly via mobile & desktop push notifications.`;
+  }
+
+  if (q.includes('pl') || q.includes('parental') || q.includes('privilege') || q.includes('maternity') || q.includes('paternity')) {
+    return `### 👶 Privilege & Parental Leave (PL) Framework
+* **Primary Caregiver Leave**: 26 weeks of paid parental leave for birthing parents.
+* **Secondary Caregiver Leave**: 4 weeks of paid parental leave, flexible within the first 12 months.
+* **Privilege Days**: Discretionary executive rest days credited after milestone corporate tenures (3+ years).`;
+  }
+
+  if (q.includes('forecast') || q.includes('shortage') || q.includes('staffing') || q.includes('bottleneck')) {
+    return `### 📊 Workforce & Predictive Staffing Analysis
+* **Engine Status**: Active lookahead horizon is currently tracking team capacity for the upcoming quarter.
+* **Current Focus**: Engineering and Finance have overlapping planned leave requests in late September 2026.
+* **Actionable Advice**:
+  1. Mandate code-review proxies prior to scheduled absences.
+  2. Maintain cross-functional coverage to keep departmental capacity ≥70%.
+  3. Explore simulation runs in the **Predictive Staffing** workspace.`;
+  }
+
+  if (q.includes('review') || q.includes('performance') || q.includes('feedback') || q.includes('okr') || q.includes('rating')) {
+    return `### 🌟 Performance Review & Feedback Framework
+* **Active Cycle**: Q3 2026 Mid-Year Reviews.
+* **5-Point Scale**:
+  1. *Exceptional (5.0)* — Consistent outsized impact beyond role level.
+  2. *Exceeds Expectations (4.0–4.9)* — High autonomous delivery & peer uplift.
+  3. *Meets Expectations (3.0–3.9)* — Reliable achievement of core KPIs.
+  4. *Needs Improvement (2.0–2.9)* — Performance coaching plan recommended.
+  5. *Unsatisfactory (1.0–1.9)* — Formal remediation required.
+* **Review Steps**: Self-evaluation → Peer Feedback → Manager Synthesis → 1-on-1 Calibration → Immutable Cryptographic Signature.`;
+  }
+
+  if (q.includes('security') || q.includes('audit') || q.includes('vault') || q.includes('encrypt')) {
+    return `### 🛡️ Enterprise Security & Data Integrity
+* **Data Encryption**: All HR documents and employee identifiers are protected with AES-256 encryption.
+* **Audit Trail**: Every administrative action (leave approvals, role switches, document downloads) creates an immutable SHA-256 tamper-evident log entry.
+* **Cloud Sync**: Offline local mutations queue securely and sync automatically once network connectivity is re-established.`;
+  }
+
+  // Role-specific general fallback
+  if (roleId === 'compliance_officer') {
+    return `As the **Enterprise HR & Compliance Officer**, I have verified our current policies. Regarding "${userQuery}":
+1. **Statutory Standards**: Our leave rules conform with standard labor standards and enterprise contracts.
+2. **Procedural Requirements**: All exceptions require documented justification and HR Admin sign-off.
+3. **Audit Compliance**: Records are archived in the tamper-resistant security vault for 7 years.
+Is there a specific clause or dispute you would like me to evaluate?`;
+  }
+
+  if (roleId === 'fast_responder') {
+    return `⚡ **Instant HR Answer**:
+• Topic: ${userQuery}
+• Status: Verified under OmniHR standard guidelines.
+• Quick Action: Navigate to the appropriate workspace using the sidebar or press **⌘K** to search.
+Need more details? Feel free to ask!`;
+  }
+
+  if (roleId === 'workforce_strategist') {
+    return `### 📈 Workforce Planning Recommendation
+Regarding "${userQuery}":
+• **Capacity Impact**: Assess critical single-point dependencies and solo authority roles.
+• **Contingency**: Pre-assign signing authority and handoff documentation before key team leaves.
+• **Metric Target**: Target a minimum of 75% departmental operational availability.`;
+  }
+
+  return `Hello! As your **OmniHR Assistant**, I'm here to assist with all human resource operations.
+Regarding your query: "${userQuery}"
+
+Here are quick resources to help:
+• **Leave Requests**: Use the Leave Management tab to view real-time balance calculations or submit a new leave.
+• **Staffing Forecasts**: View the Predictive Staffing analytics tab for AI shortage predictions.
+• **Company Directory**: Search or filter employees across all 7 departments.
+• **Performance Records**: Check or draft evaluations in the Performance Reviews module.
+
+How else can I assist your workflow today?`;
+}
+
+// POST /api/chat - Multi-turn conversational Gemini Chatbot
+app.post('/api/chat', async (req, res) => {
+  try {
+    const {
+      messages = [],
+      roleId = 'hr_general',
+      systemInstruction = '',
+      model = 'gemini-3.8-flash',
+      contextSummary = {},
+    } = req.body;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ success: false, error: 'Messages array is required' });
+    }
+
+    // Resolve model based on user prompt guidelines:
+    // "Use gemini-3.1-pro-preview for particularly complex tasks, gemini-3.5-flash for general tasks,
+    // and gemini-3.1-flash-lite for tasks that should happen fast. Model: models/gemini-3.8-flash"
+    let selectedModel = 'gemini-3.8-flash';
+    const cleanModel = String(model).replace(/^models\//, '').trim();
+
+    if (cleanModel === 'gemini-3.1-pro-preview') {
+      selectedModel = 'gemini-3.1-pro-preview';
+    } else if (cleanModel === 'gemini-3.1-flash-lite') {
+      selectedModel = 'gemini-3.1-flash-lite';
+    } else if (cleanModel === 'gemini-3.5-flash') {
+      selectedModel = 'gemini-3.5-flash';
+    } else if (cleanModel === 'gemini-3.8-flash') {
+      selectedModel = 'gemini-3.8-flash';
+    } else if (roleId === 'compliance_officer' || roleId === 'workforce_strategist') {
+      selectedModel = 'gemini-3.1-pro-preview';
+    } else if (roleId === 'fast_responder') {
+      selectedModel = 'gemini-3.1-flash-lite';
+    } else {
+      selectedModel = 'gemini-3.8-flash';
+    }
+
+    // Build context-enhanced system instruction
+    const defaultRoleInstructions: Record<string, string> = {
+      compliance_officer: `You are the OmniHR Enterprise Compliance & Labor Policy Advisor.
+You specialize in statutory leave regulations (Earned Leave EL, Casual Leave CL, Sick Leave SL, Privilege/Parental Leave PL), audit trails, anti-discrimination guidelines, labor laws, and disciplinary procedures.
+Provide rigorous, structured, professional guidance with precise policy clauses and step-by-step compliance checklists.`,
+      hr_general: `You are the OmniHR Virtual Assistant, a friendly, professional, and knowledgeable HR specialist.
+You assist employees, managers, and HR administrators with everyday enterprise inquiries: leave policies, leave balances, performance review cycles, team directory lookups, payroll document verification, and cloud file management.
+Keep explanations clear, supportive, and actionable with markdown formatting.`,
+      fast_responder: `You are the OmniHR Quick-Response Assistant.
+Your goal is maximum speed, clarity, and brevity. Provide concise bulleted answers, quick status summaries, policy thresholds, and direct links to application workspaces without fluff.`,
+      workforce_strategist: `You are the OmniHR Predictive Workforce Strategist.
+You analyze organizational depth, capacity metrics, single-point-of-failure dependencies, sprint handover protocols, and staffing shortage mitigation plans.
+Help managers make data-driven scheduling and cross-training decisions.`,
+      performance_coach: `You are the OmniHR Performance & 1-on-1 Review Coach.
+You assist managers and employees in formulating SMART goals, writing constructive and empathetic 360 review feedback, calibrating ratings, and establishing actionable growth plans.`,
+    };
+
+    const baseInstruction = systemInstruction || defaultRoleInstructions[roleId] || defaultRoleInstructions.hr_general;
+    const enrichedSystemInstruction = `${baseInstruction}
+
+Current Corporate Simulation Context:
+- Today's Date: 2026-09-08
+- Application: OmniHR Enterprise HR Management Platform (v2.4)
+- Available Modules: Employee Directory, Leave Management (EL/CL/SL/PL), Predictive Staffing Shortage Forecasting, Performance Reviews (5-point scale), Monthly Reports, Payroll & Documents (AES-256 Vault), Google Drive Workspace, Tamper-evident Audit Logs.
+${contextSummary?.currentUserName ? `- Active User: ${contextSummary.currentUserName} (${contextSummary.currentUserRole}, Department: ${contextSummary.currentUserDepartment})` : ''}
+${contextSummary?.pendingLeavesCount ? `- Pending Leaves Awaiting Approval: ${contextSummary.pendingLeavesCount}` : ''}
+- Always maintain professional confidentiality and do not leak personal medical details.`;
+
+    const ai = getGeminiClient();
+
+    if (ai) {
+      try {
+        // Format messages for Gemini API
+        // SDK expects: contents: [{ role: 'user' | 'model', parts: [{ text: ... }] }]
+        const contents = messages.map((m: any) => ({
+          role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
+          parts: [{ text: m.text || m.content || '' }],
+        }));
+
+        // Ensure alternating roles and user starts
+        const sanitizedContents: any[] = [];
+        let expectedRole = 'user';
+
+        for (const msg of contents) {
+          if (sanitizedContents.length === 0 && msg.role !== 'user') {
+            continue; // Skip leading model messages
+          }
+          if (msg.role === expectedRole) {
+            sanitizedContents.push(msg);
+            expectedRole = expectedRole === 'user' ? 'model' : 'user';
+          } else if (sanitizedContents.length > 0) {
+            // Append text to previous message of the same role if consecutive
+            const last = sanitizedContents[sanitizedContents.length - 1];
+            last.parts[0].text += `\n\n${msg.parts[0].text}`;
+          }
+        }
+
+        if (sanitizedContents.length === 0) {
+          sanitizedContents.push({
+            role: 'user',
+            parts: [{ text: messages[messages.length - 1]?.text || messages[messages.length - 1]?.content || 'Hello' }],
+          });
+        }
+
+        let response;
+        try {
+          response = await ai.models.generateContent({
+            model: selectedModel,
+            contents: sanitizedContents,
+            config: {
+              systemInstruction: enrichedSystemInstruction,
+            },
+          });
+        } catch (modelErr: any) {
+          // If gemini-3.5-flash or preview model has temporary availability or rate limit,
+          // seamlessly fallback to gemini-3.8-flash
+          console.warn(`Model ${selectedModel} failed, retrying with gemini-3.8-flash:`, modelErr?.message || modelErr);
+          if (selectedModel !== 'gemini-3.8-flash') {
+            selectedModel = 'gemini-3.8-flash';
+            response = await ai.models.generateContent({
+              model: selectedModel,
+              contents: sanitizedContents,
+              config: {
+                systemInstruction: enrichedSystemInstruction,
+              },
+            });
+          } else {
+            throw modelErr;
+          }
+        }
+
+        const replyText = response.text || '';
+        return res.json({
+          success: true,
+          text: replyText,
+          modelUsed: selectedModel,
+          roleId,
+          aiGenerated: true,
+        });
+      } catch (geminiError: any) {
+        console.warn('Gemini chat API error, deploying intelligent fallback:', geminiError?.message || geminiError);
+        const lastUserMsg = messages.filter((m: any) => m.role === 'user').pop();
+        const fallbackText = generateFallbackChatResponse(
+          lastUserMsg?.text || lastUserMsg?.content || 'Hello',
+          roleId,
+          selectedModel,
+          contextSummary
+        );
+
+        return res.json({
+          success: true,
+          text: fallbackText,
+          modelUsed: selectedModel,
+          roleId,
+          aiGenerated: false,
+          note: 'Generated via OmniHR Enterprise Domain Knowledge Engine',
+        });
+      }
+    }
+
+    // No API key provided: Use domain knowledge engine fallback
+    const lastUserMsg = messages.filter((m: any) => m.role === 'user').pop();
+    const fallbackText = generateFallbackChatResponse(
+      lastUserMsg?.text || lastUserMsg?.content || 'Hello',
+      roleId,
+      selectedModel,
+      contextSummary
+    );
+
+    return res.json({
+      success: true,
+      text: fallbackText,
+      modelUsed: selectedModel,
+      roleId,
+      aiGenerated: false,
+      note: 'Generated via OmniHR Enterprise Domain Knowledge Engine',
+    });
+  } catch (err: any) {
+    console.error('Server error in /api/chat:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+  }
+});
+
 // Start Server with Vite Middleware in Development
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

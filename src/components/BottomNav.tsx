@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   HardDrive,
   Sparkles,
+  Bot,
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -24,6 +25,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
   const tabs = [
     { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'assistant', label: 'Gemini AI', icon: Bot },
     { id: 'employees', label: 'Directory', icon: Users },
     {
       id: 'leaves',

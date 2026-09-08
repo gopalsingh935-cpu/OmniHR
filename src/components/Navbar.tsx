@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Bell,
@@ -16,14 +16,17 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Role } from '../types';
+import { GlobalSearch, GlobalSearchNavigationTarget } from './GlobalSearch';
 
 interface NavbarProps {
+  onNavigate?: (target: GlobalSearchNavigationTarget) => void;
   onSearchChange?: (term: string) => void;
   onOpenNotifications: () => void;
   unreadNotifsCount: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
+  onNavigate,
   onSearchChange,
   onOpenNotifications,
   unreadNotifsCount,
@@ -44,7 +47,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   } = useAuth();
 
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const allEmployees = storageService.getEmployees();
+
+  // Global hotkey listener for Cmd+K / Ctrl+K
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsMobileSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   const handleRoleSwitch = (empId: string) => {
     const selected = allEmployees.find((e) => e.id === empId);
@@ -85,21 +101,22 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Center Search (Optional Quick Filter) */}
+      {/* Center Search (OmniHR Global Command & Search) */}
       <div className="hidden md:flex flex-1 max-w-md mx-6">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search employees, reviews, leave records..."
-            onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-1.5 pl-9 pr-4 text-xs text-slate-800 placeholder-slate-400 transition-colors focus:border-indigo-500 focus:bg-white focus:outline-hidden dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-200 dark:focus:bg-slate-800"
-          />
-        </div>
+        <GlobalSearch onNavigate={onNavigate || (() => {})} isEmbeddedNavbar />
       </div>
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Mobile Search Button (visible on < md) */}
+        <button
+          onClick={() => setIsMobileSearchOpen(true)}
+          title="Search OmniHR (⌘K)"
+          className="flex md:hidden h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+
         {/* Offline / Online indicator & Switcher */}
         <div className="flex items-center gap-1.5">
           <button
@@ -265,6 +282,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Global Command Palette / Search Modal (for mobile or triggered via Cmd+K) */}
+      {isMobileSearchOpen && (
+        <GlobalSearch
+          isOpenModal
+          onCloseModal={() => setIsMobileSearchOpen(false)}
+          onNavigate={(target) => {
+            if (onNavigate) onNavigate(target);
+            setIsMobileSearchOpen(false);
+          }}
+        />
+      )}
     </header>
   );
 };

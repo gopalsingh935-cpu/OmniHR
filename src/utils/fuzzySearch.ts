@@ -52,16 +52,16 @@ export function levenshteinDistance(a: string, b: string): number {
 /**
  * Fuzzy matches a query against a target string.
  */
-export function fuzzyMatch(text: string, query: string): FuzzyMatchResult {
+export function fuzzyMatch(text: string | null | undefined, query: string): FuzzyMatchResult {
   if (!query || query.trim() === '') {
     return { isMatch: true, score: 100, ranges: [] };
   }
-  if (!text) {
+  if (!text && text !== 0 as any) {
     return { isMatch: false, score: 0, ranges: [] };
   }
 
-  const cleanText = text;
-  const lowerText = text.toLowerCase();
+  const cleanText = String(text);
+  const lowerText = cleanText.toLowerCase();
   const pattern = query.toLowerCase().trim();
 
   // 1. Exact Full Match
@@ -273,4 +273,127 @@ export function getHighlightSegments(text: string, ranges: [number, number][]): 
 
   return segments;
 }
+
+export interface MultiFieldTarget {
+  key: string;
+  label: string;
+  text: string | null | undefined;
+  weight?: number; // default 1.0
+}
+
+export interface MultiFieldMatchResult {
+  isMatch: boolean;
+  score: number;
+  matchedFields: { key: string; label: string; score: number }[];
+  fieldRanges: Record<string, [number, number][]>;
+}
+
+/**
+ * Searches across multiple fields of an entity simultaneously.
+ * Supports:
+ * - Single-token queries (searches all fields, picks best match)
+ * - Multi-token queries (ensures ALL tokens are satisfied across the entity's fields)
+ * - Highlights each matched token in its respective field
+ */
+export function multiFieldFuzzyMatch(
+  fields: MultiFieldTarget[],
+  query: string
+): MultiFieldMatchResult {
+  const q = (query || '').trim();
+  const fieldRanges: Record<string, [number, number][]> = {};
+  for (const f of fields) {
+    fieldRanges[f.key] = [];
+  }
+
+  if (!q) {
+    return {
+      isMatch: true,
+      score: 100,
+      matchedFields: [],
+      fieldRanges,
+    };
+  }
+
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const matchedFieldsMap = new Map<string, { key: string; label: string; score: number }>();
+
+  // 1. First test full query against all fields
+  let fullMatchScore = 0;
+  let fullMatchFound = false;
+
+  for (const f of fields) {
+    if (!f.text) continue;
+    const res = fuzzyMatch(f.text, q);
+    if (res.isMatch && res.score > 0) {
+      fullMatchFound = true;
+      const weightedScore = Math.round(res.score * (f.weight ?? 1.0));
+      fullMatchScore = Math.max(fullMatchScore, weightedScore);
+      fieldRanges[f.key] = [...fieldRanges[f.key], ...res.ranges];
+      matchedFieldsMap.set(f.key, {
+        key: f.key,
+        label: f.label,
+        score: weightedScore,
+      });
+    }
+  }
+
+  // If single token or full query matched, return full match if found
+  if (tokens.length <= 1) {
+    return {
+      isMatch: fullMatchFound,
+      score: Math.min(100, fullMatchScore),
+      matchedFields: Array.from(matchedFieldsMap.values()).sort((a, b) => b.score - a.score),
+      fieldRanges,
+    };
+  }
+
+  // 2. For multi-token queries, check if EACH token is satisfied by at least one field
+  let allTokensSatisfied = true;
+  let totalTokenScore = 0;
+
+  for (const token of tokens) {
+    let tokenSatisfied = false;
+    let bestScoreForToken = 0;
+
+    for (const f of fields) {
+      if (!f.text) continue;
+      const res = fuzzyMatch(f.text, token);
+      if (res.isMatch && res.score > 0) {
+        tokenSatisfied = true;
+        const weighted = Math.round(res.score * (f.weight ?? 1.0));
+        bestScoreForToken = Math.max(bestScoreForToken, weighted);
+        fieldRanges[f.key] = [...fieldRanges[f.key], ...res.ranges];
+
+        const existing = matchedFieldsMap.get(f.key);
+        if (!existing || weighted > existing.score) {
+          matchedFieldsMap.set(f.key, {
+            key: f.key,
+            label: f.label,
+            score: weighted,
+          });
+        }
+      }
+    }
+
+    if (!tokenSatisfied) {
+      allTokensSatisfied = false;
+      break;
+    }
+    totalTokenScore += bestScoreForToken;
+  }
+
+  const isMatch = fullMatchFound || allTokensSatisfied;
+  const avgScore = allTokensSatisfied ? Math.round(totalTokenScore / tokens.length) : 0;
+  const finalScore = Math.min(100, Math.max(fullMatchScore, avgScore));
+
+  return {
+    isMatch,
+    score: isMatch ? Math.max(25, finalScore) : 0,
+    matchedFields: isMatch
+      ? Array.from(matchedFieldsMap.values()).sort((a, b) => b.score - a.score)
+      : [],
+    fieldRanges,
+  };
+}
+
 

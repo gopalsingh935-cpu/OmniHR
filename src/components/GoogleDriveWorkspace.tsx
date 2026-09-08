@@ -144,11 +144,14 @@ export const GoogleDriveWorkspace: React.FC = () => {
 
   useEffect(() => {
     if (accessToken) {
-      loadDriveContents(accessToken, currentFolder.id, searchQuery, mimeFilter);
+      const timer = setTimeout(() => {
+        loadDriveContents(accessToken, currentFolder.id, searchQuery, mimeFilter);
+      }, 350);
+      return () => clearTimeout(timer);
     }
-  }, [accessToken, currentFolder.id, mimeFilter, loadDriveContents]);
+  }, [accessToken, currentFolder.id, searchQuery, mimeFilter, loadDriveContents]);
 
-  // Trigger search on debounce or Enter
+  // Trigger search immediately on form submit or Enter
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (accessToken) {
@@ -711,8 +714,18 @@ OAuth 2.0 PKCE Enforced.
                   placeholder="Search in Drive..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-1.5 pl-8 pr-3 text-xs text-slate-800 focus:border-indigo-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-1.5 pl-8 pr-7 text-xs text-slate-800 focus:border-indigo-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    title="Clear search"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </form>
 
               <select

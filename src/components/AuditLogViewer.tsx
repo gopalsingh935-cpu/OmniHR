@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Server,
   Layers,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
@@ -27,15 +28,12 @@ export const AuditLogViewer: React.FC = () => {
     const action = (log.actionType || log.action || '').toUpperCase();
     const matchesAction = filterAction === 'ALL' || action.includes(filterAction.toUpperCase());
 
-    const q = (searchQuery || '').toLowerCase();
-    const matchesSearch =
-      !q ||
-      (log.actorName || '').toLowerCase().includes(q) ||
-      (log.description || log.details || '').toLowerCase().includes(q) ||
-      action.toLowerCase().includes(q) ||
-      (log.integrityHash || '').toLowerCase().includes(q) ||
-      (log.device || '').toLowerCase().includes(q) ||
-      (log.ipAddress || '').toLowerCase().includes(q);
+    const q = (searchQuery || '').trim().toLowerCase();
+    if (!q) return matchesAction;
+
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const haystack = `${log.actorName || ''} ${log.description || log.details || ''} ${action} ${log.integrityHash || ''} ${log.device || ''} ${log.ipAddress || ''}`.toLowerCase();
+    const matchesSearch = tokens.every((token) => haystack.includes(token));
 
     return matchesAction && matchesSearch;
   });
@@ -148,8 +146,17 @@ export const AuditLogViewer: React.FC = () => {
             placeholder="Search audit trail by actor, action description, or hash..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-xs text-slate-800 placeholder-slate-400 focus:outline-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-xs text-slate-800 placeholder-slate-400 focus:outline-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

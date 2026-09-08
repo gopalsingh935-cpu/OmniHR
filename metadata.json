@@ -1,6 +1,6 @@
 {
   "name": "Remix OmniHR - Enterprise HR Management & Employee Portal",
-  "description": "Secure enterprise HR management system featuring AI-driven predictive staffing shortage forecasting, Google Drive cloud storage and document synchronization, role-based access control, leave management (EL, CL, SL, PL) with real-time approvals, immutable performance reviews, document vault, payroll accounting sync, and compliance reporting.",
+  "description": "Secure enterprise HR management system featuring a multi-turn Gemini HR Assistant with specialized role personas, AI-driven predictive staffing shortage forecasting, Google Drive cloud storage and document synchronization, role-based access control, leave management (EL, CL, SL, PL), immutable performance reviews, document vault, payroll accounting sync, and compliance reporting.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -17,25 +17,66 @@ import {
   CalendarDays,
   ListOrdered,
   Layers,
+  Search,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
-import { LeaveRequest, LeaveType, LeaveStatus } from '../types';
+import { LeaveRequest, LeaveType, LeaveStatus, Employee } from '../types';
 import { TeamLeaveCalendar } from './TeamLeaveCalendar';
+import { EmployeeLeaveBalanceBar } from './EmployeeLeaveBalanceBar';
 
 interface LeaveManagementProps {
   initialApplyOpen?: boolean;
+  initialSearchQuery?: string;
+  initialSelectedLeaveId?: string | null;
 }
 
-export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOpen = false }) => {
+export const LeaveManagement: React.FC<LeaveManagementProps> = ({
+  initialApplyOpen = false,
+  initialSearchQuery = '',
+  initialSelectedLeaveId = null,
+}) => {
   const { currentUser, isOnline, refreshUserData } = useAuth();
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => storageService.getLeaves());
-  const [activeViewTab, setActiveViewTab] = useState<'calendar' | 'requests'>('calendar');
+  const [allEmployees, setAllEmployees] = useState<Employee[]>(() => storageService.getEmployees());
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>(currentUser.id);
+  const [activeViewTab, setActiveViewTab] = useState<'calendar' | 'requests'>(
+    initialSelectedLeaveId || initialSearchQuery ? 'requests' : 'calendar'
+  );
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(initialApplyOpen);
   const [selectedFilter, setSelectedFilter] = useState<'all' | LeaveStatus>('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'all' | LeaveType>('all');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [highlightedLeaveId, setHighlightedLeaveId] = useState<string | null>(initialSelectedLeaveId);
   const [commentModalLeave, setCommentModalLeave] = useState<LeaveRequest | null>(null);
   const [newCommentText, setNewCommentText] = useState('');
+
+  // Sync external search query
+  useEffect(() => {
+    if (initialSearchQuery !== undefined && initialSearchQuery !== '') {
+      setSearchQuery(initialSearchQuery);
+      setActiveViewTab('requests');
+    }
+  }, [initialSearchQuery]);
+
+  // Sync external selected leave ID
+  useEffect(() => {
+    if (initialSelectedLeaveId) {
+      setHighlightedLeaveId(initialSelectedLeaveId);
+      setActiveViewTab('requests');
+      setSelectedFilter('all');
+      setSelectedTypeFilter('all');
+    }
+  }, [initialSelectedLeaveId]);
+
+  // Keep selectedEmployeeId in sync if logged-in currentUser changes
+  useEffect(() => {
+    setSelectedEmployeeId(currentUser.id);
+  }, [currentUser.id]);
+
+  const selectedEmployee =
+    allEmployees.find((e) => e.id === selectedEmployeeId) || currentUser;
 
   // Form state
   const [leaveType, setLeaveType] = useState<LeaveType>('EL');
@@ -63,10 +104,29 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
     return count;
   }, [leaves]);
 
+  // Calculate cross-department overlapping days in current month (September 2026)
+  const currentMonthCrossDeptOverlapsCount = useMemo(() => {
+    let count = 0;
+    for (let day = 1; day <= 30; day++) {
+      const dateStr = `2026-09-${String(day).padStart(2, '0')}`;
+      const onDay = leaves.filter(
+        (l) =>
+          l.status !== 'rejected' &&
+          l.status !== 'cancelled' &&
+          l.startDate <= dateStr &&
+          l.endDate >= dateStr
+      );
+      const depts = new Set(onDay.map((l) => l.department));
+      if (depts.size >= 2) count++;
+    }
+    return count;
+  }, [leaves]);
+
   // Auto-subscribe to real-time storage mutations
   useEffect(() => {
     const unsub = storageService.subscribe(() => {
       setLeaves(storageService.getLeaves());
+      setAllEmployees(storageService.getEmployees());
     });
     return unsub;
   }, []);
@@ -164,20 +224,30 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
     }
   };
 
-  // Filter leaves based on user role and filters
-  const visibleLeaves = leaves.filter((l) => {
-    const roleMatch =
-      currentUser.role === 'admin'
-        ? true // Admin sees all leaves
-        : currentUser.role === 'manager'
-        ? l.department === currentUser.department || l.employeeId === currentUser.id
-        : l.employeeId === currentUser.id; // Employee only sees own leaves
+  // Filter leaves based on user role, status/type filters, and search query
+  const visibleLeaves = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
 
-    const statusMatch = selectedFilter === 'all' || l.status === selectedFilter;
-    const typeMatch = selectedTypeFilter === 'all' || l.leaveType === selectedTypeFilter;
+    return leaves.filter((l) => {
+      const roleMatch =
+        currentUser.role === 'admin'
+          ? true // Admin sees all leaves
+          : currentUser.role === 'manager'
+          ? l.department === currentUser.department || l.employeeId === currentUser.id
+          : l.employeeId === currentUser.id; // Employee only sees own leaves
 
-    return roleMatch && statusMatch && typeMatch;
-  });
+      const statusMatch = selectedFilter === 'all' || l.status === selectedFilter;
+      const typeMatch = selectedTypeFilter === 'all' || l.leaveType === selectedTypeFilter;
+
+      if (!roleMatch || !statusMatch || !typeMatch) return false;
+
+      if (tokens.length === 0) return true;
+
+      const searchableString = `${l.employeeName} ${l.department} ${l.leaveType} ${l.reason} ${l.status} ${l.id} ${l.startDate} ${l.endDate}`.toLowerCase();
+      return tokens.every((token) => searchableString.includes(token));
+    });
+  }, [leaves, currentUser, selectedFilter, selectedTypeFilter, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -201,64 +271,19 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
         </button>
       </div>
 
-      {/* Leave Quota Cards for Current User */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 dark:border-indigo-950/60 dark:bg-indigo-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300">Earned Leave (EL)</span>
-            <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Annual</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-indigo-700 dark:text-indigo-400">
-              {balance.EL.remaining}
-            </span>
-            <span className="text-xs text-slate-500">/ {balance.EL.total} Days Left</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mt-1">Used: {balance.EL.used} days</p>
-        </div>
-
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 dark:border-emerald-950/60 dark:bg-emerald-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300">Casual Leave (CL)</span>
-            <span className="rounded-md bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Short Notice</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400">
-              {balance.CL.remaining}
-            </span>
-            <span className="text-xs text-slate-500">/ {balance.CL.total} Days Left</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mt-1">Used: {balance.CL.used} days</p>
-        </div>
-
-        <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-950/60 dark:bg-blue-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-900 dark:text-blue-300">Sick Leave (SL)</span>
-            <span className="rounded-md bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Medical</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-blue-700 dark:text-blue-400">
-              {balance.SL.remaining}
-            </span>
-            <span className="text-xs text-slate-500">/ {balance.SL.total} Days Left</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mt-1">Used: {balance.SL.used} days</p>
-        </div>
-
-        <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-4 dark:border-purple-950/60 dark:bg-purple-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-900 dark:text-purple-300">Privilege Leave (PL)</span>
-            <span className="rounded-md bg-purple-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Parental/Extended</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-purple-700 dark:text-purple-400">
-              {balance.PL.remaining}
-            </span>
-            <span className="text-xs text-slate-500">/ {balance.PL.total} Days Left</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mt-1">Used: {balance.PL.used} days</p>
-        </div>
-      </div>
+      {/* Leave Quotas & Available Balance Progress Bars */}
+      <EmployeeLeaveBalanceBar
+        currentUser={currentUser}
+        selectedEmployee={selectedEmployee}
+        allEmployees={allEmployees}
+        onSelectEmployee={setSelectedEmployeeId}
+        onApplyForLeave={(cat) => {
+          if (cat) {
+            setLeaveType(cat);
+          }
+          setIsApplyModalOpen(true);
+        }}
+      />
 
       {/* Primary View Navigation Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
@@ -272,12 +297,19 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
             }`}
           >
             <CalendarDays className="h-4 w-4" />
-            <span>Team Leave Calendar</span>
-            {currentMonthOverlapsCount > 0 && (
+            <span>Cross-Dept Calendar & Overlap Matrix</span>
+            {currentMonthCrossDeptOverlapsCount > 0 ? (
+              <span
+                className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white shadow-2xs"
+                title={`${currentMonthCrossDeptOverlapsCount} days with concurrent cross-department leaves`}
+              >
+                ⚡ {currentMonthCrossDeptOverlapsCount} Overlaps
+              </span>
+            ) : currentMonthOverlapsCount > 0 ? (
               <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white shadow-2xs">
                 {currentMonthOverlapsCount} Overlaps
               </span>
-            )}
+            ) : null}
           </button>
 
           <button
@@ -319,39 +351,62 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
         />
       ) : (
         <>
-          {/* Filter Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex flex-wrap gap-1.5">
-              {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => (
+          {/* Search Bar & Filter Tabs */}
+          <div className="space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+            {/* Search Input for Leave Requests */}
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search leave requests by employee, reason, dates, or ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white py-1.5 pl-9 pr-8 text-xs text-slate-800 placeholder-slate-400 shadow-2xs transition-colors focus:border-indigo-500 focus:outline-hidden dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+              />
+              {searchQuery && (
                 <button
-                  key={status}
-                  onClick={() => setSelectedFilter(status)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                    selectedFilter === status
-                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                  }`}
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  title="Clear search"
                 >
-                  {status === 'all' ? 'All Applications' : status}
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              ))}
+              )}
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">Type:</span>
-              {(['all', 'EL', 'CL', 'SL', 'PL'] as const).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setSelectedTypeFilter(type)}
-                  className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${
-                    selectedTypeFilter === type
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  {type === 'all' ? 'Any' : type}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-1.5">
+                {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setSelectedFilter(status)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                      selectedFilter === status
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {status === 'all' ? 'All Applications' : status}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400 font-medium">Type:</span>
+                {(['all', 'EL', 'CL', 'SL', 'PL'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setSelectedTypeFilter(type)}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition-colors ${
+                      selectedTypeFilter === type
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                    }`}
+                  >
+                    {type === 'all' ? 'Any' : type}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -363,11 +418,16 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
                 (currentUser.role === 'admin' || currentUser.role === 'manager') &&
                 leave.status === 'pending' &&
                 !isOwner;
+              const isHighlighted = highlightedLeaveId === leave.id;
 
               return (
                 <div
                   key={leave.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 transition-all hover:border-slate-300 dark:hover:border-slate-700"
+                  className={`rounded-2xl border bg-white p-4 shadow-xs dark:bg-slate-900 transition-all ${
+                    isHighlighted
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/30 dark:border-indigo-400'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700'
+                  }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
@@ -528,26 +588,61 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ initialApplyOp
                   Leave Type Category *
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['EL', 'CL', 'SL', 'PL'] as const).map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setLeaveType(type)}
-                      className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all ${
-                        leaveType === type
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 font-bold'
-                          : 'border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      <span className="text-sm">{type}</span>
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        {type === 'EL' ? 'Earned' : type === 'CL' ? 'Casual' : type === 'SL' ? 'Sick' : 'Privilege'}
-                      </span>
-                      <span className="text-[9px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold mt-0.5">
-                        {balance[type].remaining}d remaining
-                      </span>
-                    </button>
-                  ))}
+                  {(['EL', 'CL', 'SL', 'PL'] as const).map((type) => {
+                    const cat = balance[type];
+                    const availPct = cat.total > 0 ? Math.round((cat.remaining / cat.total) * 100) : 0;
+                    const isExhausted = cat.remaining <= 0;
+                    const isLow = cat.remaining > 0 && cat.remaining <= 2;
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setLeaveType(type)}
+                        className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all text-center ${
+                          leaveType === type
+                            ? 'border-indigo-600 bg-indigo-50/80 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 font-bold ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm font-bold">{type}</span>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            ({type === 'EL' ? 'Earned' : type === 'CL' ? 'Casual' : type === 'SL' ? 'Sick' : 'Privilege'})
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-semibold mt-0.5 ${
+                            isExhausted
+                              ? 'text-rose-600 dark:text-rose-400 font-bold'
+                              : isLow
+                              ? 'text-amber-600 dark:text-amber-400 font-bold'
+                              : 'text-indigo-600 dark:text-indigo-400'
+                          }`}
+                        >
+                          {cat.remaining} of {cat.total}d left
+                        </span>
+                        {/* Mini Available Balance progress bar */}
+                        <div
+                          className="w-full mt-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+                          title={`Available Balance: ${cat.remaining} / ${cat.total} days (${availPct}%)`}
+                        >
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              isExhausted
+                                ? 'bg-rose-500'
+                                : isLow
+                                ? 'bg-amber-500'
+                                : 'bg-indigo-600 dark:bg-indigo-400'
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(0, availPct))}%` }}
+                          />
+                        </div>
+                        <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
+                          {availPct}% available
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

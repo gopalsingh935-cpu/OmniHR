@@ -11,6 +11,7 @@ import {
   DownloadCloud,
   HardDrive,
   Sparkles,
+  Bot,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: CalendarDays,
       badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined,
     },
+    { id: 'assistant', label: 'Gemini HR Assistant', icon: Bot, specialBadge: 'Gemini' },
     { id: 'forecast', label: 'Predictive Staffing', icon: Sparkles },
     { id: 'reviews', label: 'Performance Reviews', icon: Star },
     { id: 'reports', label: 'Monthly Reports', icon: FileBarChart },
@@ -67,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}
             >
               <div className="flex items-center gap-3">
-                <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <Icon className={`h-4 w-4 ${isActive ? 'text-white' : item.specialBadge ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
               </div>
               {item.badge !== undefined && (
@@ -79,6 +81,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }`}
                 >
                   {item.badge}
+                </span>
+              )}
+              {item.specialBadge && !isActive && (
+                <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                  {item.specialBadge}
                 </span>
               )}
             </button>

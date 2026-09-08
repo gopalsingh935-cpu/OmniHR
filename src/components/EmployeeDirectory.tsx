@@ -24,7 +24,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Employee, Role } from '../types';
-import { fuzzyMatch, getHighlightSegments } from '../utils/fuzzySearch';
+import { multiFieldFuzzyMatch, getHighlightSegments, MultiFieldTarget } from '../utils/fuzzySearch';
 
 // Sub-component to render highlighted matches in real-time
 const HighlightedText: React.FC<{ text: string; ranges?: [number, number][] }> = ({
@@ -53,17 +53,49 @@ const HighlightedText: React.FC<{ text: string; ranges?: [number, number][] }> =
   );
 };
 
-export const EmployeeDirectory: React.FC = () => {
+export interface EmployeeDirectoryProps {
+  initialSearchQuery?: string;
+  initialSelectedEmployeeId?: string | null;
+  onClearInitialEmployee?: () => void;
+}
+
+export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
+  initialSearchQuery = '',
+  initialSelectedEmployeeId = null,
+  onClearInitialEmployee,
+}) => {
   const { currentUser, refreshUserData } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>(() => storageService.getEmployees());
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [selectedDepartment, setSelectedDepartment] = useState('All');
   const [selectedWorkMode, setSelectedWorkMode] = useState('All');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(() => {
+    if (initialSelectedEmployeeId) {
+      return storageService.getEmployees().find((e) => e.id === initialSelectedEmployeeId) || null;
+    }
+    return null;
+  });
   const [activeDossierTab, setActiveDossierTab] = useState<'profile' | 'education' | 'experience' | 'certs' | 'documents' | 'payroll'>('profile');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync external search query
+  useEffect(() => {
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery);
+    }
+  }, [initialSearchQuery]);
+
+  // Sync external selected employee
+  useEffect(() => {
+    if (initialSelectedEmployeeId) {
+      const found = employees.find((e) => e.id === initialSelectedEmployeeId);
+      if (found) {
+        setSelectedEmployee(found);
+      }
+    }
+  }, [initialSelectedEmployeeId, employees]);
 
   // Keyboard shortcut listener: Press "/" to focus fuzzy search bar
   useEffect(() => {
@@ -110,61 +142,34 @@ export const EmployeeDirectory: React.FC = () => {
   const departments = ['All', 'Engineering', 'Product', 'Human Resources', 'Design', 'Finance', 'Marketing', 'Operations'];
   const workModes = ['All', 'Remote', 'Hybrid', 'On-site'];
 
-  // Real-time fuzzy search results across Name, Department, and Job Role (Designation)
+  // Real-time fuzzy search results across Name, Department, Job Role, Code, Email, and Location
   const fuzzySearchResults = useMemo(() => {
     const q = searchQuery.trim();
 
     return employees
       .map((emp) => {
-        const nameMatch = fuzzyMatch(emp.name, q);
-        const deptMatch = fuzzyMatch(emp.department, q);
-        const roleMatch = fuzzyMatch(emp.designation, q);
-        const codeMatch = fuzzyMatch(emp.employeeCode, q);
-        const emailMatch = fuzzyMatch(emp.email, q);
+        const fields: MultiFieldTarget[] = [
+          { key: 'name', label: 'Name', text: emp.name, weight: 1.35 },
+          { key: 'role', label: 'Job Role', text: emp.designation, weight: 1.25 },
+          { key: 'dept', label: 'Department', text: emp.department, weight: 1.2 },
+          { key: 'code', label: 'ID', text: emp.employeeCode, weight: 1.15 },
+          { key: 'email', label: 'Email', text: emp.email, weight: 1.0 },
+          { key: 'location', label: 'Location', text: emp.location, weight: 0.95 },
+          { key: 'workMode', label: 'Work Mode', text: emp.workMode, weight: 0.9 },
+        ];
 
-        const matchedFields: { label: string; score: number }[] = [];
-        if (q) {
-          if (nameMatch.isMatch && nameMatch.ranges.length > 0) {
-            matchedFields.push({ label: 'Name', score: nameMatch.score });
-          }
-          if (roleMatch.isMatch && roleMatch.ranges.length > 0) {
-            matchedFields.push({ label: 'Job Role', score: roleMatch.score });
-          }
-          if (deptMatch.isMatch && deptMatch.ranges.length > 0) {
-            matchedFields.push({ label: 'Department', score: deptMatch.score });
-          }
-          if (codeMatch.isMatch && codeMatch.ranges.length > 0) {
-            matchedFields.push({ label: 'ID', score: codeMatch.score });
-          }
-        }
-
-        const isMatch =
-          !q ||
-          nameMatch.isMatch ||
-          deptMatch.isMatch ||
-          roleMatch.isMatch ||
-          codeMatch.isMatch ||
-          emailMatch.isMatch;
-
-        // Weight name and role matches slightly higher for natural relevance ranking
-        const maxScore = !q
-          ? 100
-          : Math.max(
-              nameMatch.isMatch ? nameMatch.score * 1.3 : 0,
-              roleMatch.isMatch ? roleMatch.score * 1.2 : 0,
-              deptMatch.isMatch ? deptMatch.score * 1.15 : 0,
-              codeMatch.isMatch ? codeMatch.score : 0,
-              emailMatch.isMatch ? emailMatch.score * 0.9 : 0
-            );
+        const match = multiFieldFuzzyMatch(fields, q);
 
         return {
           emp,
-          isMatch,
-          score: Math.round(maxScore),
-          matchedFields: matchedFields.sort((a, b) => b.score - a.score),
-          nameRanges: nameMatch.ranges,
-          deptRanges: deptMatch.ranges,
-          roleRanges: roleMatch.ranges,
+          isMatch: match.isMatch,
+          score: match.score,
+          matchedFields: match.matchedFields,
+          nameRanges: match.fieldRanges.name || [],
+          deptRanges: match.fieldRanges.dept || [],
+          roleRanges: match.fieldRanges.role || [],
+          codeRanges: match.fieldRanges.code || [],
+          emailRanges: match.fieldRanges.email || [],
         };
       })
       .filter(({ emp, isMatch }) => {
@@ -179,6 +184,13 @@ export const EmployeeDirectory: React.FC = () => {
         return a.emp.name.localeCompare(b.emp.name);
       });
   }, [employees, searchQuery, selectedDepartment, selectedWorkMode]);
+
+  const handleCloseDossier = () => {
+    setSelectedEmployee(null);
+    if (onClearInitialEmployee) {
+      onClearInitialEmployee();
+    }
+  };
 
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,68 +389,71 @@ export const EmployeeDirectory: React.FC = () => {
 
       {/* Directory Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {fuzzySearchResults.map(({ emp, score, matchedFields, nameRanges, deptRanges, roleRanges }) => (
-          <div
-            key={emp.id}
-            onClick={() => setSelectedEmployee(emp)}
-            className="group relative cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <img
-                  src={emp.avatarUrl}
-                  alt={emp.name}
-                  className="h-12 w-12 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700"
-                />
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    <HighlightedText text={emp.name} ranges={nameRanges} />
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    <HighlightedText text={emp.designation} ranges={roleRanges} />
-                  </p>
-                  <span className="inline-block mt-0.5 font-mono text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                    {emp.employeeCode}
+        {fuzzySearchResults.map(
+          ({ emp, score, matchedFields, nameRanges, deptRanges, roleRanges, codeRanges, emailRanges }) => (
+            <div
+              key={emp.id}
+              onClick={() => setSelectedEmployee(emp)}
+              className="group relative cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={emp.avatarUrl}
+                    alt={emp.name}
+                    className="h-12 w-12 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+                  />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <HighlightedText text={emp.name} ranges={nameRanges} />
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <HighlightedText text={emp.designation} ranges={roleRanges} />
+                    </p>
+                    <span className="inline-block mt-0.5 font-mono text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                      <HighlightedText text={emp.employeeCode} ranges={codeRanges} />
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    emp.role === 'admin'
+                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
+                      : emp.role === 'manager'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                  }`}
+                >
+                  {emp.role}
+                </span>
+              </div>
+
+              {/* Matched Field Tag (shown when search is active) */}
+              {searchQuery && matchedFields.length > 0 && (
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50/80 px-2.5 py-1 text-[11px] text-amber-900 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/80">
+                  <span className="font-medium flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Matched in: <strong>{matchedFields.map((f) => f.label).join(', ')}</strong></span>
+                  </span>
+                  <span className="font-mono font-bold text-[10px] text-amber-700 dark:text-amber-300">
+                    {score}%
                   </span>
                 </div>
-              </div>
-              <span
-                className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
-                  emp.role === 'admin'
-                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
-                    : emp.role === 'manager'
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                }`}
-              >
-                {emp.role}
-              </span>
-            </div>
+              )}
 
-            {/* Matched Field Tag (shown when search is active) */}
-            {searchQuery && matchedFields.length > 0 && (
-              <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50/80 px-2.5 py-1 text-[11px] text-amber-900 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/80">
-                <span className="font-medium flex items-center gap-1">
-                  <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>Matched in: <strong>{matchedFields.map((f) => f.label).join(', ')}</strong></span>
-                </span>
-                <span className="font-mono font-bold text-[10px] text-amber-700 dark:text-amber-300">
-                  {score}%
-                </span>
-              </div>
-            )}
-
-            <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
-              <div className="flex items-center gap-2">
-                <Briefcase className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <span className="truncate">
-                  <HighlightedText text={emp.department} ranges={deptRanges} />
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <span className="truncate">{emp.email}</span>
-              </div>
+              <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">
+                    <HighlightedText text={emp.department} ranges={deptRanges} />
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">
+                    <HighlightedText text={emp.email} ranges={emailRanges} />
+                  </span>
+                </div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 <span>
@@ -534,7 +549,7 @@ export const EmployeeDirectory: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedEmployee(null)}
+                onClick={handleCloseDossier}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold"
               >
                 &times;

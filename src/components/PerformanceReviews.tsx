@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Star,
   ShieldCheck,
@@ -11,17 +11,43 @@ import {
   AlertCircle,
   Eye,
   FileCheck,
+  Search,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { PerformanceReview, Employee } from '../types';
 
-export const PerformanceReviews: React.FC = () => {
+interface PerformanceReviewsProps {
+  initialSearchQuery?: string;
+  initialSelectedReviewId?: string | null;
+}
+
+export const PerformanceReviews: React.FC<PerformanceReviewsProps> = ({
+  initialSearchQuery = '',
+  initialSelectedReviewId = null,
+}) => {
   const { currentUser, refreshUserData } = useAuth();
   const [reviews, setReviews] = useState<PerformanceReview[]>(() => storageService.getReviews());
   const [selectedReview, setSelectedReview] = useState<PerformanceReview | null>(null);
   const [isNewReviewModalOpen, setIsNewReviewModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const employees = storageService.getEmployees();
+
+  // Sync external search query
+  useEffect(() => {
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery);
+    }
+  }, [initialSearchQuery]);
+
+  // Sync external selected review
+  useEffect(() => {
+    if (initialSelectedReviewId) {
+      const match = reviews.find((r) => r.id === initialSelectedReviewId);
+      if (match) setSelectedReview(match);
+    }
+  }, [initialSelectedReviewId, reviews]);
 
   // New Review Form State (For HR Admin or Manager)
   const [formEmployeeId, setFormEmployeeId] = useState(
@@ -40,10 +66,21 @@ export const PerformanceReviews: React.FC = () => {
   // Strict check: Is the current user an employee?
   const isEmployee = currentUser.role === 'employee';
 
-  // Visible reviews: If employee, only their own reviews. If manager/admin, all reviews or team reviews.
-  const visibleReviews = isEmployee
-    ? reviews.filter((r) => r.employeeId === currentUser.id)
-    : reviews;
+  // Visible reviews: Filtered by role and multi-token search query
+  const visibleReviews = useMemo(() => {
+    const baseList = isEmployee
+      ? reviews.filter((r) => r.employeeId === currentUser.id)
+      : reviews;
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return baseList;
+
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return baseList.filter((rev) => {
+      const searchStr = `${rev.employeeName} ${rev.reviewerName} ${rev.cycle} ${rev.ratingLabel} ${rev.overallRating} ${rev.reviewerFeedback} ${rev.achievements?.join(' ') || ''} ${rev.areasOfGrowth?.join(' ') || ''}`.toLowerCase();
+      return tokens.every((token) => searchStr.includes(token));
+    });
+  }, [reviews, isEmployee, currentUser.id, searchQuery]);
 
   const handleCreateReview = (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,14 +232,61 @@ export const PerformanceReviews: React.FC = () => {
         </div>
       </div>
 
+      {/* Reviews List Header & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            Evaluation Records
+          </h3>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {visibleReviews.length}
+          </span>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search reviews by name, cycle, feedback..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white py-1.5 pl-9 pr-8 text-xs text-slate-800 placeholder-slate-400 shadow-2xs transition-colors focus:border-indigo-500 focus:outline-hidden dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Reviews List */}
       <div className="space-y-4">
-        {visibleReviews.map((rev) => (
-          <div
-            key={rev.id}
-            onClick={() => setSelectedReview(rev)}
-            className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
-          >
+        {visibleReviews.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
+            <Search className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              No performance reviews match &ldquo;{searchQuery}&rdquo;
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Try adjusting your search terms or clearing the filter.
+            </p>
+          </div>
+        ) : (
+          visibleReviews.map((rev) => (
+            <div
+              key={rev.id}
+              onClick={() => setSelectedReview(rev)}
+              className={`cursor-pointer rounded-2xl border bg-white p-5 shadow-xs transition-all dark:bg-slate-900 ${
+                selectedReview?.id === rev.id
+                  ? 'border-indigo-500 ring-2 ring-indigo-500/30 dark:border-indigo-400'
+                  : 'border-slate-200 hover:border-indigo-300 dark:border-slate-800 dark:hover:border-slate-700'
+              }`}
+            >
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -244,14 +328,7 @@ export const PerformanceReviews: React.FC = () => {
               </span>
             </div>
           </div>
-        ))}
-
-        {visibleReviews.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-400 dark:border-slate-800">
-            <Star className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No performance evaluations found</p>
-          </div>
-        )}
+        )))}
       </div>
 
       {/* Review Details Modal */}

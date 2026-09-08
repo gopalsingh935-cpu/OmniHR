@@ -244,3 +244,32 @@ export interface StaffingForecastResult {
   note?: string;
 }
 
+export type GeminiModelId =
+  | 'gemini-3.1-pro-preview'
+  | 'gemini-3.5-flash'
+  | 'gemini-3.1-flash-lite'
+  | 'gemini-3.8-flash';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  timestamp: string;
+  modelUsed?: string;
+  roleId?: string;
+  status?: 'sending' | 'complete' | 'error';
+}
+
+export interface ChatbotPersona {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  systemInstruction: string;
+  recommendedModel: GeminiModelId;
+  taskComplexity: 'complex' | 'general' | 'fast';
+  badge: string;
+  starterPrompts: string[];
+}
+
+
