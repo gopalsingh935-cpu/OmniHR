@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -18,10 +18,40 @@ import {
   Calendar,
   AlertCircle,
   Eye,
+  Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Employee, Role } from '../types';
+import { fuzzyMatch, getHighlightSegments } from '../utils/fuzzySearch';
+
+// Sub-component to render highlighted matches in real-time
+const HighlightedText: React.FC<{ text: string; ranges?: [number, number][] }> = ({
+  text,
+  ranges = [],
+}) => {
+  if (!ranges || ranges.length === 0 || !text) {
+    return <span>{text}</span>;
+  }
+  const segments = getHighlightSegments(text, ranges);
+  return (
+    <span>
+      {segments.map((seg, i) =>
+        seg.isHighlighted ? (
+          <mark
+            key={i}
+            className="rounded-xs bg-amber-200/90 font-bold text-amber-950 px-0.5 dark:bg-amber-500/30 dark:text-amber-200"
+          >
+            {seg.text}
+          </mark>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        )
+      )}
+    </span>
+  );
+};
 
 export const EmployeeDirectory: React.FC = () => {
   const { currentUser, refreshUserData } = useAuth();
@@ -32,6 +62,24 @@ export const EmployeeDirectory: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [activeDossierTab, setActiveDossierTab] = useState<'profile' | 'education' | 'experience' | 'certs' | 'documents' | 'payroll'>('profile');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut listener: Press "/" to focus fuzzy search bar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === '/' &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA'
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // New Employee Form State (For HR Admin)
   const [newEmp, setNewEmp] = useState({
@@ -54,20 +102,75 @@ export const EmployeeDirectory: React.FC = () => {
   const departments = ['All', 'Engineering', 'Product', 'Human Resources', 'Design', 'Finance', 'Marketing', 'Operations'];
   const workModes = ['All', 'Remote', 'Hybrid', 'On-site'];
 
-  const filteredEmployees = employees.filter((emp) => {
-    const q = (searchQuery || '').toLowerCase();
-    const matchesSearch =
-      !q ||
-      (emp.name || '').toLowerCase().includes(q) ||
-      (emp.email || '').toLowerCase().includes(q) ||
-      (emp.designation || '').toLowerCase().includes(q) ||
-      (emp.employeeCode || '').toLowerCase().includes(q);
+  // Real-time fuzzy search results across Name, Department, and Job Role (Designation)
+  const fuzzySearchResults = useMemo(() => {
+    const q = searchQuery.trim();
 
-    const matchesDept = selectedDepartment === 'All' || emp.department === selectedDepartment;
-    const matchesWorkMode = selectedWorkMode === 'All' || emp.workMode === selectedWorkMode;
+    return employees
+      .map((emp) => {
+        const nameMatch = fuzzyMatch(emp.name, q);
+        const deptMatch = fuzzyMatch(emp.department, q);
+        const roleMatch = fuzzyMatch(emp.designation, q);
+        const codeMatch = fuzzyMatch(emp.employeeCode, q);
+        const emailMatch = fuzzyMatch(emp.email, q);
 
-    return matchesSearch && matchesDept && matchesWorkMode;
-  });
+        const matchedFields: { label: string; score: number }[] = [];
+        if (q) {
+          if (nameMatch.isMatch && nameMatch.ranges.length > 0) {
+            matchedFields.push({ label: 'Name', score: nameMatch.score });
+          }
+          if (roleMatch.isMatch && roleMatch.ranges.length > 0) {
+            matchedFields.push({ label: 'Job Role', score: roleMatch.score });
+          }
+          if (deptMatch.isMatch && deptMatch.ranges.length > 0) {
+            matchedFields.push({ label: 'Department', score: deptMatch.score });
+          }
+          if (codeMatch.isMatch && codeMatch.ranges.length > 0) {
+            matchedFields.push({ label: 'ID', score: codeMatch.score });
+          }
+        }
+
+        const isMatch =
+          !q ||
+          nameMatch.isMatch ||
+          deptMatch.isMatch ||
+          roleMatch.isMatch ||
+          codeMatch.isMatch ||
+          emailMatch.isMatch;
+
+        // Weight name and role matches slightly higher for natural relevance ranking
+        const maxScore = !q
+          ? 100
+          : Math.max(
+              nameMatch.isMatch ? nameMatch.score * 1.3 : 0,
+              roleMatch.isMatch ? roleMatch.score * 1.2 : 0,
+              deptMatch.isMatch ? deptMatch.score * 1.15 : 0,
+              codeMatch.isMatch ? codeMatch.score : 0,
+              emailMatch.isMatch ? emailMatch.score * 0.9 : 0
+            );
+
+        return {
+          emp,
+          isMatch,
+          score: Math.round(maxScore),
+          matchedFields: matchedFields.sort((a, b) => b.score - a.score),
+          nameRanges: nameMatch.ranges,
+          deptRanges: deptMatch.ranges,
+          roleRanges: roleMatch.ranges,
+        };
+      })
+      .filter(({ emp, isMatch }) => {
+        const matchesDept = selectedDepartment === 'All' || emp.department === selectedDepartment;
+        const matchesWorkMode = selectedWorkMode === 'All' || emp.workMode === selectedWorkMode;
+        return isMatch && matchesDept && matchesWorkMode;
+      })
+      .sort((a, b) => {
+        if (q) {
+          return b.score - a.score;
+        }
+        return a.emp.name.localeCompare(b.emp.name);
+      });
+  }, [employees, searchQuery, selectedDepartment, selectedWorkMode]);
 
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,56 +245,115 @@ export const EmployeeDirectory: React.FC = () => {
         )}
       </div>
 
-      {/* Advanced Filter Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by name, ID (e.g. EMP-1042), email, or title..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-4 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          />
+      {/* Real-time Fuzzy Search & Advanced Filter Bar */}
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-xs">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          {/* Fuzzy Search Input */}
+          <div className="relative flex-1">
+            <Search
+              className={`absolute left-3.5 top-3 h-4 w-4 transition-colors ${
+                searchQuery ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'
+              }`}
+            />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Fuzzy search by name, department, or job role (e.g. 'elena', 'eng', 'designer')..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2.5 pl-10 pr-20 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:focus:bg-slate-800 transition-all shadow-2xs"
+            />
+
+            {/* Clear Button & Keyboard Shortcut Badge */}
+            <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
+              {searchQuery ? (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <kbd className="hidden sm:inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  /
+                </kbd>
+              )}
+            </div>
+          </div>
+
+          {/* Department Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium hidden sm:inline">Dept:</span>
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept === 'All' ? 'All Departments' : dept}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Work Mode Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium hidden sm:inline">Work Mode:</span>
+            <select
+              value={selectedWorkMode}
+              onChange={(e) => setSelectedWorkMode(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {workModes.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode === 'All' ? 'All Locations' : mode}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Department Filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium hidden sm:inline">Dept:</span>
-          <select
-            value={selectedDepartment}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-800 focus:border-indigo-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            {departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept === 'All' ? 'All Departments' : dept}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Real-time Status & Quick Filter Suggestions */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              Showing <strong className="text-slate-800 dark:text-slate-200">{fuzzySearchResults.length}</strong> of{' '}
+              {employees.length} personnel
+            </span>
 
-        {/* Work Mode Filter */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium hidden sm:inline">Work Mode:</span>
-          <select
-            value={selectedWorkMode}
-            onChange={(e) => setSelectedWorkMode(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-800 focus:border-indigo-500 focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            {workModes.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode === 'All' ? 'All Locations' : mode}
-              </option>
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800">
+                <Sparkles className="h-3 w-3" />
+                <span>Fuzzy Match Active</span>
+              </span>
+            )}
+          </div>
+
+          {/* Quick Search Chips */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">Quick queries:</span>
+            {['Engineering', 'Design', 'Product', 'Architect', 'Lead', 'Alex'].map((chip) => (
+              <button
+                key={chip}
+                onClick={() => setSearchQuery(chip)}
+                className={`rounded-lg px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  searchQuery.toLowerCase() === chip.toLowerCase()
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                }`}
+              >
+                {chip}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
       </div>
 
       {/* Directory Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredEmployees.map((emp) => (
+        {fuzzySearchResults.map(({ emp, score, matchedFields, nameRanges, deptRanges, roleRanges }) => (
           <div
             key={emp.id}
             onClick={() => setSelectedEmployee(emp)}
@@ -206,9 +368,11 @@ export const EmployeeDirectory: React.FC = () => {
                 />
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    {emp.name}
+                    <HighlightedText text={emp.name} ranges={nameRanges} />
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{emp.designation}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <HighlightedText text={emp.designation} ranges={roleRanges} />
+                  </p>
                   <span className="inline-block mt-0.5 font-mono text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
                     {emp.employeeCode}
                   </span>
@@ -227,18 +391,35 @@ export const EmployeeDirectory: React.FC = () => {
               </span>
             </div>
 
+            {/* Matched Field Tag (shown when search is active) */}
+            {searchQuery && matchedFields.length > 0 && (
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50/80 px-2.5 py-1 text-[11px] text-amber-900 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/80">
+                <span className="font-medium flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Matched in: <strong>{matchedFields.map((f) => f.label).join(', ')}</strong></span>
+                </span>
+                <span className="font-mono font-bold text-[10px] text-amber-700 dark:text-amber-300">
+                  {score}%
+                </span>
+              </div>
+            )}
+
             <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
               <div className="flex items-center gap-2">
-                <Briefcase className="h-3.5 w-3.5 text-slate-400" />
-                <span className="truncate">{emp.department}</span>
+                <Briefcase className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="truncate">
+                  <HighlightedText text={emp.department} ranges={deptRanges} />
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-slate-400" />
+                <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 <span className="truncate">{emp.email}</span>
               </div>
               <div className="flex items-center gap-2">
-                <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                <span>{emp.location} ({emp.workMode})</span>
+                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>
+                  {emp.location} ({emp.workMode})
+                </span>
               </div>
             </div>
 
@@ -255,19 +436,47 @@ export const EmployeeDirectory: React.FC = () => {
         ))}
       </div>
 
-      {filteredEmployees.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-700">
-          <p className="text-sm font-medium">No employee records found matching your filters.</p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedDepartment('All');
-              setSelectedWorkMode('All');
-            }}
-            className="mt-3 text-xs font-semibold text-indigo-600 dark:text-indigo-400 underline"
-          >
-            Clear Filters
-          </button>
+      {fuzzySearchResults.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-500 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 mb-3">
+            <Search className="h-6 w-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+            No employees found matching your search
+          </h3>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            {searchQuery ? (
+              <>
+                No records matched "<strong className="text-slate-600 dark:text-slate-300">{searchQuery}</strong>". Try
+                searching for partial names (e.g. "Alex"), departments (e.g. "Engineering"), or job roles (e.g.
+                "Designer").
+              </>
+            ) : (
+              'No employees matched the selected department or work mode filters.'
+            )}
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Clear Search Query</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedDepartment('All');
+                setSelectedWorkMode('All');
+              }}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Reset All Filters</span>
+            </button>
+          </div>
         </div>
       )}
 
