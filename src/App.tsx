@@ -10,6 +10,7 @@ import { LeaveManagement } from './components/LeaveManagement';
 import { PerformanceReviews } from './components/PerformanceReviews';
 import { MonthlyReports } from './components/MonthlyReports';
 import { PayrollAndDocuments } from './components/PayrollAndDocuments';
+import { GoogleDriveWorkspace } from './components/GoogleDriveWorkspace';
 import { AuditLogViewer } from './components/AuditLogViewer';
 import { BiometricModal } from './components/BiometricModal';
 import { OAuthModal } from './components/OAuthModal';
@@ -79,6 +80,8 @@ const AppContent: React.FC = () => {
             {activeTab === 'reports' && <MonthlyReports />}
 
             {activeTab === 'payroll' && <PayrollAndDocuments />}
+
+            {activeTab === 'drive' && <GoogleDriveWorkspace />}
 
             {activeTab === 'audit' && <AuditLogViewer />}
           </div>

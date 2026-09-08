@@ -14,9 +14,12 @@ import {
   Clock,
   Layers,
   FileCode,
+  HardDrive,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
+import { getGoogleAccessToken } from '../services/googleAuthService';
+import { googleDriveService } from '../services/googleDriveService';
 import { Employee, DocumentRecord } from '../types';
 
 export const PayrollAndDocuments: React.FC = () => {
@@ -110,6 +113,38 @@ Security Hash: SHA-256 AES-256 Validated
     a.download = `Payslip_${currentUser.name.replace(' ', '_')}_${payMonth.replace(' ', '_')}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Sync Document directly to Google Drive
+  const handleSyncDocToDrive = async (doc: DocumentRecord) => {
+    try {
+      const token = await getGoogleAccessToken();
+      if (!token) {
+        alert('Please connect to Google Drive first using the Google Drive tab in the sidebar.');
+        return;
+      }
+      const archiveContent = `OMNIHR ENCRYPTED ARCHIVE DOCUMENT
+Title: ${doc.title}
+Category: ${doc.category}
+Uploaded On: ${doc.uploadedOn}
+File Size: ${doc.fileSize}
+Encryption: ${doc.encryptionStandard}
+SHA-256 Checksum: ${doc.checksum}
+Employee Owner: ${currentUser.name} (${currentUser.employeeCode})
+Access Level: ${doc.accessLevel.join(', ')}
+`;
+      const blob = new Blob([archiveContent], { type: 'text/plain;charset=utf-8' });
+      await googleDriveService.uploadFile(
+        token,
+        blob,
+        `${doc.title.replace(/\s+/g, '_')}.txt`,
+        'text/plain'
+      );
+      setSyncSuccessMessage(`Document "${doc.title}" synchronized to your Google Drive!`);
+      setTimeout(() => setSyncSuccessMessage(null), 4000);
+    } catch (err: any) {
+      alert(`Failed to sync to Google Drive: ${err.message}`);
+    }
   };
 
   return (
@@ -331,6 +366,15 @@ Security Hash: SHA-256 AES-256 Validated
                   </div>
 
                   <div className="flex items-center gap-2 self-start sm:self-center">
+                    <button
+                      onClick={() => handleSyncDocToDrive(doc)}
+                      title="Upload copy directly to Google Drive"
+                      className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 transition-colors"
+                    >
+                      <HardDrive className="h-3 w-3" />
+                      <span>Sync to Drive</span>
+                    </button>
+
                     <button
                       onClick={() => alert(`Accessing encrypted preview of ${doc.title} with verified AES-256 session token.`)}
                       className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"

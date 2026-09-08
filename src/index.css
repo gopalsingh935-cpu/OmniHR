@@ -6,6 +6,65 @@
   }
 }
 
+/* Google Sign-in Button Styles */
+.gsi-material-button {
+  user-select: none;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  background-color: #ffffff;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  box-sizing: border-box;
+  color: #3c4043;
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  height: 42px;
+  letter-spacing: 0.25px;
+  outline: none;
+  overflow: hidden;
+  padding: 0 16px;
+  position: relative;
+  text-align: center;
+  transition: background-color .2s, border-color .2s, box-shadow .2s;
+  vertical-align: middle;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.gsi-material-button:hover {
+  background-color: #f8fafd;
+  border-color: #c2c7ce;
+  box-shadow: 0 1px 3px 0 rgba(60,64,67,.2);
+}
+.gsi-material-button .gsi-material-button-content-wrapper {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 100%;
+  justify-content: center;
+  gap: 12px;
+  position: relative;
+  width: 100%;
+}
+.gsi-material-button .gsi-material-button-icon {
+  height: 20px;
+  min-width: 20px;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gsi-material-button .gsi-material-button-contents {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  color: #374151;
+}
+
 @media print {
   @page {
     size: A4 portrait;

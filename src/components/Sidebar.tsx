@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Lock,
   DownloadCloud,
+  HardDrive,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
@@ -39,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'reviews', label: 'Performance Reviews', icon: Star },
     { id: 'reports', label: 'Monthly Reports', icon: FileBarChart },
     { id: 'payroll', label: 'Payroll & Documents', icon: DollarSign },
+    { id: 'drive', label: 'Google Drive', icon: HardDrive },
     { id: 'audit', label: 'Audit Log & Security', icon: ShieldCheck },
   ];
 

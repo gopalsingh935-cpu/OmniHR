@@ -157,7 +157,7 @@ export interface AuditLogEntry {
   actorId: string;
   actorName: string;
   actorRole: Role;
-  actionType: 'AUTH' | 'LEAVE_APPLIED' | 'LEAVE_STATUS_CHANGED' | 'REVIEW_CREATED' | 'RECORD_UPDATED' | 'DOCUMENT_ACCESSED' | 'PAYROLL_SYNC' | 'SYSTEM_BACKUP';
+  actionType: 'AUTH' | 'LEAVE_APPLIED' | 'LEAVE_STATUS_CHANGED' | 'REVIEW_CREATED' | 'RECORD_UPDATED' | 'DOCUMENT_ACCESSED' | 'PAYROLL_SYNC' | 'SYSTEM_BACKUP' | 'DRIVE_SYNC';
   description: string;
   ipAddress: string;
   device: string;

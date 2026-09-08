@@ -7,6 +7,7 @@ import {
   FileBarChart,
   DollarSign,
   ShieldCheck,
+  HardDrive,
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -29,9 +30,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       icon: CalendarDays,
       badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined,
     },
-    { id: 'reviews', label: 'Reviews', icon: Star },
-    { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'payroll', label: 'Payroll', icon: DollarSign },
+    { id: 'drive', label: 'Drive', icon: HardDrive },
+    { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'audit', label: 'Audit', icon: ShieldCheck },
   ];
 
