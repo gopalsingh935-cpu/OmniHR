@@ -12,6 +12,7 @@ import { MonthlyReports } from './components/MonthlyReports';
 import { PayrollAndDocuments } from './components/PayrollAndDocuments';
 import { GoogleDriveWorkspace } from './components/GoogleDriveWorkspace';
 import { AuditLogViewer } from './components/AuditLogViewer';
+import { PredictiveStaffingAnalytics } from './components/PredictiveStaffingAnalytics';
 import { BiometricModal } from './components/BiometricModal';
 import { OAuthModal } from './components/OAuthModal';
 import { NotificationsModal } from './components/NotificationsModal';
@@ -73,6 +74,13 @@ const AppContent: React.FC = () => {
 
             {activeTab === 'leaves' && (
               <LeaveManagement initialApplyOpen={autoOpenApplyLeave} />
+            )}
+
+            {activeTab === 'forecast' && (
+              <PredictiveStaffingAnalytics
+                onNavigateToLeaves={() => setActiveTab('leaves')}
+                onNavigateToDrive={() => setActiveTab('drive')}
+              />
             )}
 
             {activeTab === 'reviews' && <PerformanceReviews />}

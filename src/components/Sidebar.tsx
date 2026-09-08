@@ -10,6 +10,7 @@ import {
   Lock,
   DownloadCloud,
   HardDrive,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
@@ -37,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: CalendarDays,
       badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined,
     },
+    { id: 'forecast', label: 'Predictive Staffing', icon: Sparkles },
     { id: 'reviews', label: 'Performance Reviews', icon: Star },
     { id: 'reports', label: 'Monthly Reports', icon: FileBarChart },
     { id: 'payroll', label: 'Payroll & Documents', icon: DollarSign },

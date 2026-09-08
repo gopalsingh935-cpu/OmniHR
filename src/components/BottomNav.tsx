@@ -8,6 +8,7 @@ import {
   DollarSign,
   ShieldCheck,
   HardDrive,
+  Sparkles,
 } from 'lucide-react';
 
 interface BottomNavProps {
@@ -30,6 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       icon: CalendarDays,
       badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined,
     },
+    { id: 'forecast', label: 'Forecast', icon: Sparkles },
     { id: 'payroll', label: 'Payroll', icon: DollarSign },
     { id: 'drive', label: 'Drive', icon: HardDrive },
     { id: 'reports', label: 'Reports', icon: FileBarChart },

@@ -157,7 +157,7 @@ export interface AuditLogEntry {
   actorId: string;
   actorName: string;
   actorRole: Role;
-  actionType: 'AUTH' | 'LEAVE_APPLIED' | 'LEAVE_STATUS_CHANGED' | 'REVIEW_CREATED' | 'RECORD_UPDATED' | 'DOCUMENT_ACCESSED' | 'PAYROLL_SYNC' | 'SYSTEM_BACKUP' | 'DRIVE_SYNC';
+  actionType: 'AUTH' | 'LEAVE_APPLIED' | 'LEAVE_STATUS_CHANGED' | 'REVIEW_CREATED' | 'RECORD_UPDATED' | 'DOCUMENT_ACCESSED' | 'PAYROLL_SYNC' | 'SYSTEM_BACKUP' | 'DRIVE_SYNC' | 'FORECAST_GENERATED';
   description: string;
   ipAddress: string;
   device: string;
@@ -173,7 +173,7 @@ export interface AppNotification {
   message: string;
   timestamp: string;
   read: boolean;
-  type: 'leave' | 'review' | 'security' | 'system' | 'payroll';
+  type: 'leave' | 'review' | 'security' | 'system' | 'payroll' | 'forecast';
   targetUserId?: string; // If specific to an employee, or broadcast
   actionLink?: string;
 }
@@ -184,3 +184,63 @@ export interface SyncStatus {
   pendingItemsCount: number;
   isSyncing: boolean;
 }
+
+export interface DailyCapacityPoint {
+  date: string;
+  onLeave: number;
+  percent: number;
+}
+
+export interface HighRiskPeriod {
+  startDate: string;
+  endDate: string;
+  severity: 'Moderate' | 'High' | 'Critical';
+  reason: string;
+  missingRoles: string[];
+}
+
+export interface DepartmentForecast {
+  department: string;
+  totalHeadcount: number;
+  minStaffedHeadcount: number;
+  avgCapacityPercentage: number;
+  riskLevel: 'Low' | 'Moderate' | 'High' | 'Critical';
+  riskScore: number;
+  highRiskPeriods: HighRiskPeriod[];
+  keyBottlenecks: string[];
+  recommendations: string[];
+  dailyCapacities?: DailyCapacityPoint[];
+}
+
+export interface CriticalRoleVulnerability {
+  role: string;
+  employeeName: string;
+  department: string;
+  vulnerabilityLevel: 'Critical' | 'High' | 'Medium';
+  explanation: string;
+  contingencyPlan: string;
+}
+
+export interface ActionableMitigation {
+  priority: 'Immediate' | 'High' | 'Medium';
+  title: string;
+  department: string;
+  action: string;
+  impactScore: number;
+  applied?: boolean;
+}
+
+export interface StaffingForecastResult {
+  forecastHorizonDays: number;
+  analysisDate: string;
+  overallRiskLevel: 'Low' | 'Moderate' | 'High' | 'Critical';
+  overallRiskScore: number;
+  summary: string;
+  departmentForecasts: DepartmentForecast[];
+  criticalRoleVulnerabilities: CriticalRoleVulnerability[];
+  historicalPatternInsights: string[];
+  actionableMitigations: ActionableMitigation[];
+  aiGenerated?: boolean;
+  note?: string;
+}
+
